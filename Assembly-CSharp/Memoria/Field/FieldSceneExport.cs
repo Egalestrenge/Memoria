@@ -47,6 +47,7 @@ namespace Memoria.Field
         {
             _lastPixelRect = new Rect(-1f, -1f, -1f, -1f);
             _stableFrames = 0;
+            _lastCamIdx = -1;
             _requested = false;
             _exportedCameras.Clear();
         }
@@ -54,8 +55,34 @@ namespace Memoria.Field
         /// <summary>Frames the viewport must hold still before exporting. See Update.</summary>
         private const Int32 ViewportSettleFrames = 3;
 
+        /// <summary>
+        /// Fraction of the plate that is not black, sampled on a coarse grid. Cheap on purpose:
+        /// this runs on a texture that can be 8192 wide, and a rough figure is all it takes to
+        /// tell "the background was not there yet" from "this map is dim".
+        /// </summary>
+        private static Single MeasureCoverage(Texture2D shot)
+        {
+            const Int32 Steps = 64;
+            Int32 stepX = Mathf.Max(1, shot.width / Steps);
+            Int32 stepY = Mathf.Max(1, shot.height / Steps);
+            Int32 total = 0;
+            Int32 lit = 0;
+            for (Int32 y = 0; y < shot.height; y += stepY)
+            {
+                for (Int32 x = 0; x < shot.width; x += stepX)
+                {
+                    Color pixel = shot.GetPixel(x, y);
+                    total++;
+                    if (pixel.r > 0.04f || pixel.g > 0.04f || pixel.b > 0.04f)
+                        lit++;
+                }
+            }
+            return total > 0 ? lit / (Single)total : 1f;
+        }
+
         private static Rect _lastPixelRect;
         private static Int32 _stableFrames;
+        private static Int32 _lastCamIdx = -1;
 
         public static void Update(FieldMap fieldMap)
         {
@@ -71,6 +98,19 @@ namespace Memoria.Field
             // first frame captured full screen instead: on map 150, 1920x1080 and fovX 47.83
             // instead of 1765x1080 and 44.36. The Blender project then came out with a camera that
             // is not the game's, and nothing in the log said the background was wrong.
+            // Switching BGCAM has to restart the wait as well, and watching the viewport does not
+            // notice it: the resolution is the same, so pixelRect never changes and the settle
+            // counter is already satisfied. The capture then fired on the very first frame after
+            // the switch, before the new camera's background was in place, and wrote a plate that
+            // was almost entirely black - with the log cheerfully reporting a correct-looking size.
+            // Map 153 camera 0 came out 86% black exactly this way.
+            if (fieldMap.camIdx != _lastCamIdx)
+            {
+                _lastCamIdx = fieldMap.camIdx;
+                _stableFrames = 0;
+                return;
+            }
+
             Rect pixelRect = fieldMap.mainCamera.pixelRect;
             if (pixelRect.width != _lastPixelRect.width || pixelRect.height != _lastPixelRect.height
                 || pixelRect.x != _lastPixelRect.x || pixelRect.y != _lastPixelRect.y)
@@ -211,6 +251,16 @@ namespace Memoria.Field
                 RenderTexture.active = target;
                 shot.ReadPixels(new Rect(0f, 0f, fullWidth, fullHeight), 0, 0);
                 shot.Apply();
+
+                // A plate that is nearly all black means the capture caught the field before its
+                // background was in place. It is written anyway -something is better than nothing,
+                // and the map may genuinely be dark- but it has to say so: the only other symptom
+                // is a Blender project that looks broken for no visible reason, which sends you
+                // hunting through the project instead of re-exporting.
+                Single coverage = MeasureCoverage(shot);
+                if (coverage < 0.25f)
+                    Log.Warning($"[FieldSceneExport] Only {Mathf.RoundToInt(coverage * 100f)}% of the background plate has any content; the rest is black. The capture probably ran before the background was ready. Re-enter the map to export it again.");
+
                 File.WriteAllBytes(path, shot.EncodeToPNG());
                 Log.Message($"[FieldSceneExport] Background plate {fullWidth}x{fullHeight}, which is the {frameWidth}x{frameHeight} view grown x{N(scale, "F3")} to cover a scroll range of {N(scrollX, "F0")}x{N(scrollY, "F0")} PSX units.");
             }
