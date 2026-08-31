@@ -9,8 +9,8 @@ and walls.
 
 ![Steiner casting a real shadow in the Alexandria Castle guard room](images/map150-guard-room.jpg)
 
-*Map 150, `Cast. Alex./Guard`. The background is the game's own prerendered plate, untouched — the
-shadow, and the way the light falls off across the floor, come from the 3D pass.*
+_Map 150, `Cast. Alex./Guard`. The background is the game's own prerendered plate, untouched — the
+shadow, and the way the light falls off across the floor, come from the 3D pass._
 
 This is a **fork of [Albeoris/Memoria](https://github.com/Albeoris/Memoria)**, branch
 `dynamic-shadows`. Memoria's own README lives
@@ -24,15 +24,15 @@ This is a **fork of [Albeoris/Memoria](https://github.com/Albeoris/Memoria)**, b
 
 ## Requirements
 
-|                        | Needed for                | Version                                        |
-| ---------------------- | ------------------------- | ---------------------------------------------- |
-| Final Fantasy IX       | everything                | the Steam or GOG release                        |
-| [Memoria][memoria]     | everything                | patch the game with `Memoria.Patcher` once      |
-| VS 2022 Build Tools    | building the DLL          | with the C++ `v143` toolset — see [.vsconfig](../.vsconfig) |
-| Unity Editor           | making or editing scenes  | **5.2.3f1**, the exact version the game runs on |
-| Blender                | modelling scenery         | 5.x                                             |
+|                     | Needed for               | Version                                                     |
+| ------------------- | ------------------------ | ----------------------------------------------------------- |
+| Final Fantasy IX    | everything               | the Steam or GOG release                                    |
+| [Memoria][memoria]  | everything               | patch the game with `Memoria.Patcher` once                  |
+| VS 2022 Build Tools | building the DLL         | with the C++ `v143` toolset — see [.vsconfig](../.vsconfig) |
+| Unity Editor        | making or editing scenes | **5.2.3f1**, the exact version the game runs on             |
+| Blender             | modelling scenery        | 5.x                                                         |
 
-You only need the first two to *play* it. Unity and Blender are for authoring new maps.
+You only need the first two to _play_ it. Unity and Blender are for authoring new maps.
 
 [memoria]: https://github.com/Albeoris/Memoria/releases/latest
 
@@ -97,12 +97,12 @@ and Steiner should be casting a shadow on the floor.
 
 Check `Memoria.log` in the game folder:
 
-| What you see                                        | What it means                                              |
-| --------------------------------------------------- | ---------------------------------------------------------- |
-| no `[CustomFieldObjects]` lines at all               | the mod is not active — check `[Mod] FolderNames`           |
-| `[FieldSceneBundle] Bundle not found`                | the `.unity3d` did not deploy; rerun with `-SkipBuild`      |
-| settings applied but no shadow                       | check `PLAYER3D` is not `off` in `MemoriaFieldObjects.txt`  |
-| the scene changed but the game did not               | bundles stay open for the session — **restart the game**    |
+| What you see                           | What it means                                              |
+| -------------------------------------- | ---------------------------------------------------------- |
+| no `[CustomFieldObjects]` lines at all | the mod is not active — check `[Mod] FolderNames`          |
+| `[FieldSceneBundle] Bundle not found`  | the `.unity3d` did not deploy; rerun with `-SkipBuild`     |
+| settings applied but no shadow         | check `PLAYER3D` is not `off` in `MemoriaFieldObjects.txt` |
+| the scene changed but the game did not | bundles stay open for the session — **restart the game**   |
 
 ### Compatibility
 
@@ -115,7 +115,7 @@ without trouble.
 ## How it works
 
 FFIX does not draw fields in 3D. Its camera is orthographic and essentially 2D, and perspective is
-faked in the vertex shader of each PSX material. But `BGCAM_DEF` *does* store a real 3D camera:
+faked in the vertex shader of each PSX material. But `BGCAM_DEF` _does_ store a real 3D camera:
 a rotation, a translation and a projection distance.
 
 The mod derives a true perspective camera from that and draws a **second pass** after the game's,
@@ -174,6 +174,9 @@ documented in the file itself, and summarised in [NOTES.md §6](NOTES.md).
 The scene for map `N` is a Unity scene saved as `N.unity`; the bundle it builds is `N.unity3d` and
 the mod picks it up automatically. **The file name is the configuration** — there is no list to
 maintain.
+
+Currently it only has three scenarios of Alexandria that I've used for testing purposes. The idea is to
+leave the rest to the community and create the rest of the scenarios of the game!
 
 ### 1. Dump the map from the game
 
@@ -237,7 +240,7 @@ means it loaded. The loader also reports colliders, converted light ranges and w
 ended up active — all things that fail silently otherwise.
 
 If the shadow is missing, `CATCHERDEBUG 1..4` isolates each term of the calculation so you can see
-*which* one is dead rather than guessing. See [NOTES.md §5.2c](NOTES.md).
+_which_ one is dead rather than guessing. See [NOTES.md §5.2c](NOTES.md).
 
 ---
 
@@ -264,11 +267,11 @@ Everything else in the repo is Memoria upstream.
 ## Why this cannot be a normal Memoria mod
 
 Memoria's Mod Manager installs **data** folders; it does not load assemblies. There is no Harmony and
-no BepInEx — Memoria *is* the game's `Assembly-CSharp.dll`, rewritten. The 3D pass is engine code, so
+no BepInEx — Memoria _is_ the game's `Assembly-CSharp.dll`, rewritten. The 3D pass is engine code, so
 it has to ship as a DLL, which is why this is a fork and why it conflicts with other DLL-replacing
 mods.
 
-The clean way out is for the code to land *inside* Memoria via an upstream pull request. This mod
+The clean way out is for the code to land _inside_ Memoria via an upstream pull request. This mod
 would then become data only, and the conflict would disappear. Keeping the diff at 9 lines outside
 its own files is deliberate groundwork for exactly that.
 
