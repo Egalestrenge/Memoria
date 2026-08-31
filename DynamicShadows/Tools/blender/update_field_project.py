@@ -37,6 +37,24 @@ def is_owned(name):
     return _OWNED_RE.match(name) is not None
 
 
+def collections_of(obj):
+    """Where an object currently lives. Rebuilding puts the new one back in the same place.
+
+    This is what makes the script safe on any project layout. build_field_project puts each
+    camera in its own collection and the shared geometry in another, but a project made before
+    that, or reorganised by hand, may have everything directly in the scene collection. Reading
+    the position off the object being replaced works for all of them, instead of guessing by name.
+    """
+    return list(obj.users_collection)
+
+
+def place(obj, targets, fallback):
+    for c in list(obj.users_collection):
+        c.objects.unlink(obj)
+    for c in (targets or [fallback]):
+        c.objects.link(obj)
+
+
 def main():
     argv = sys.argv[sys.argv.index("--") + 1:]
     if len(argv) < 2:
@@ -46,16 +64,29 @@ def main():
     folder = os.path.abspath(argv[1])
     bpy.ops.wm.open_mainfile(filepath=blend_path)
 
-    data = bfp.read_export(folder)
-    geo = bfp.camera_geometry(data)
+    # Every camera of the map, not just camera 0. A field with several BGCAMs has one Blender scene
+    # per camera, and refreshing only the first left the rest pointing at the previous export -
+    # with nothing saying so.
+    exports = bfp.read_exports(folder)
+    fallback = bpy.context.scene.collection
 
-    removed = []
-    for name in OWNED:
-        obj = bpy.data.objects.get(name)
-        if obj is None:
-            continue
-        removed.append(name)
-        bpy.data.objects.remove(obj, do_unlink=True)
+    # Where each generated object lives right now, before anything is removed.
+    homes = {}
+    for name in list(bpy.data.objects.keys()):
+        if is_owned(name):
+            homes[name] = collections_of(bpy.data.objects[name])
+
+    # Which scene each camera drives, so it can be pointed at the rebuilt one.
+    scene_of = {}
+    for name in homes:
+        obj = bpy.data.objects[name]
+        for scene in bpy.data.scenes:
+            if scene.camera is obj:
+                scene_of[name] = scene
+
+    removed = sorted(homes)
+    for name in removed:
+        bpy.data.objects.remove(bpy.data.objects[name], do_unlink=True)
 
     # The image is deliberately reloaded: the game's file changes size when the map's scroll range
     # changes, and the stale copy Blender holds in memory would otherwise keep winning.
@@ -63,61 +94,91 @@ def main():
         if image.name.startswith("background"):
             bpy.data.images.remove(image)
 
-    bfp.configure_scene(data, geo)
-    camera = bfp.build_camera(data, geo)
-    walkmesh = bfp.build_walkmesh(data)
+    walkmesh = None
+    markers = []
+    report = []
 
-    distance = 20.0
-    if walkmesh:
-        depths = [-(camera.matrix_world.inverted() @ v.co).z for v in walkmesh.data.vertices]
-        distance = max(depths) * 1.25 if depths else 20.0
-    plate = bfp.attach_background(data, geo, camera, distance)
-    markers = bfp.build_reference_markers(data, walkmesh)
+    for index, data in enumerate(exports):
+        suffix = data.get("_suffix", "")
+        geo = bfp.camera_geometry(data)
+        cam_name = "FieldCamera%s" % suffix
+        plate_name = "BackgroundPlate%s" % suffix
+
+        camera = bfp.build_camera(data, geo, cam_name)
+        place(camera, homes.get(cam_name), fallback)
+
+        if walkmesh is None:
+            # The walkmesh belongs to the field, not to the camera: one only, shared.
+            walkmesh = bfp.build_walkmesh(data)
+            if walkmesh is not None:
+                place(walkmesh, homes.get("Walkmesh"), fallback)
+            # An object that did not exist before has no home to remember. The shared geometry
+            # keeps together: markers follow the walkmesh rather than landing loose in whichever
+            # scene happened to be active.
+            shared_home = homes.get("Walkmesh") or homes.get("RefFieldOrigin")
+            markers = bfp.build_reference_markers(data, walkmesh)
+            for name, field, blender_pos in markers:
+                obj = bpy.data.objects.get("RefMarker" + name)
+                if obj is not None:
+                    place(obj, homes.get("RefMarker" + name) or shared_home, fallback)
+            origin = bpy.data.objects.get("RefFieldOrigin")
+            if origin is not None:
+                place(origin, homes.get("RefFieldOrigin") or shared_home, fallback)
+
+        distance = 20.0
+        if walkmesh:
+            depths = [-(camera.matrix_world.inverted() @ v.co).z for v in walkmesh.data.vertices]
+            distance = max(depths) * 1.25 if depths else 20.0
+        plate = bfp.attach_background(data, geo, camera, distance, plate_name)
+        if plate is not None:
+            place(plate, homes.get(plate_name), fallback)
+
+        # Resolution and pixel aspect belong to the SCENE, and each camera can frame differently.
+        scene = scene_of.get(cam_name)
+        if scene is None:
+            scene = bpy.data.scenes[min(index, len(bpy.data.scenes) - 1)]
+        scene.camera = camera
+        scene.render.resolution_x = data["renderWidth"]
+        scene.render.resolution_y = data["renderHeight"]
+        scene.render.resolution_percentage = 100
+        scene.render.pixel_aspect_x = geo["pixelAspectX"]
+        scene.render.pixel_aspect_y = geo["pixelAspectY"]
+
+        report.append((data, geo, camera, scene, distance))
 
     kept = [o.name for o in bpy.data.objects if not is_owned(o.name)]
-    # Generated objects belonging to the other cameras. This script only refreshes camera 0, so on
-    # a multi-camera map these stay as they were and the project is only half up to date.
-    other_cams = sorted(o.name for o in bpy.data.objects
-                        if is_owned(o.name) and o.name not in OWNED)
     bpy.ops.wm.save_mainfile(filepath=blend_path)
 
     print("")
     print("Updated %s" % blend_path)
     print("  rebuilt   : %s" % (", ".join(removed) if removed else "nothing (none present)"))
     print("  untouched : %d object(s)%s" % (len(kept), (" -> " + ", ".join(kept[:12])) if kept else ""))
-    print("  background: background.png covers %.4fx the frame" % bfp.background_scale(data))
-    print("  plate at  : %.2f m" % distance)
-    if other_cams:
-        print("  *** NOT REFRESHED: %s" % ", ".join(other_cams))
-        print("      This map has more than one BGCAM and this script only handles camera 0, so")
-        print("      those keep the old camera and background. Camera 0 is correct; the other")
-        print("      scenes in this file are not. Rebuild from scratch with build_field_project.py")
-        print("      if you have no modelling to lose.")
 
-    check = bfp.verify_projection(data, camera, walkmesh)
-    if check:
-        count, median_x, median_y, worst_x, worst_y = check
-        print("  camera    : %d walkmesh vertices, std deviation X %.4f px  Y %.4f px"
-              " (max %.2f / %.2f)" % (count, median_x, median_y, worst_x, worst_y))
-        if max(median_x, median_y) > 0.5:
-            print("  *** WRONG. This camera does not reproduce the game's. ***")
+    for data, geo, camera, scene, distance in report:
+        label = "camera %s" % data.get("cameraIndex", 0)
+        print("  %-10s: scene %r, %sx%s, plate at %.2f m, background covers %.4fx the frame"
+              % (label, scene.name, data["renderWidth"], data["renderHeight"], distance,
+                 bfp.background_scale(data)))
+        check = bfp.verify_projection(data, camera, walkmesh)
+        if check:
+            count, median_x, median_y, worst_x, worst_y = check
+            print("              %d walkmesh vertices, median deviation X %.4f px  Y %.4f px"
+                  " (max %.2f / %.2f)" % (count, median_x, median_y, worst_x, worst_y))
+            if max(median_x, median_y) > 0.5:
+                print("              *** WRONG. This camera does not reproduce the game's. ***")
 
-    # Anything resting on the floor must have its minimum Z at zero: that is where the walkmesh is.
+    scale = exports[0]["sceneScale"]
     print("")
     print("  Heights of your geometry (the game floor is at Z = 0):")
-    scale = data["sceneScale"]
-    rows = []
     for obj in bpy.data.objects:
         if obj.type != "MESH" or is_owned(obj.name) or not obj.data.vertices:
             continue
         zs = [(obj.matrix_world @ v.co).z for v in obj.data.vertices]
-        rows.append((obj.name, min(zs), max(zs)))
-    rows.sort(key=lambda r: r[1])
-    for name, low, high in rows:
+        low, high = min(zs), max(zs)
         note = ""
-        if abs(low) > 0.02:
+        if abs(low) > 0.001:
             note = "   <- %+.0f mm above the floor" % (low * 1000.0)
-        print("    %-22s Z [%7.4f, %7.4f] m   (field %7.1f)%s" % (name, low, high, low * scale, note))
+        print("    %-22s Z [%7.4f, %7.4f] m   (field %7.1f)%s" % (obj.name, low, high, low * scale, note))
 
 
 if __name__ == "__main__":
