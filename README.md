@@ -1,15 +1,15 @@
 > ## Fork: Dynamic Shadows
 >
-> Este es un **fork de [Albeoris/Memoria](https://github.com/Albeoris/Memoria)**, rama
-> `dynamic-shadows`, que añade escenarios 3D con iluminación y sombras dinámicas reales sobre los
-> mapas de Final Fantasy IX. El personaje recibe la luz de la escena, proyecta sombra sobre la
-> geometría y se ocluye correctamente con ella.
+> This is a **fork of [Albeoris/Memoria](https://github.com/Albeoris/Memoria)**, branch
+> `dynamic-shadows`, adding real 3D scenery, lighting and dynamic shadows over the field maps of
+> Final Fantasy IX. The character receives the scene's light, casts a shadow onto the geometry and
+> occludes correctly against it.
 >
-> - **Documentación del proyecto: [DynamicShadows/README.md](DynamicShadows/README.md)**
-> - Código del motor: [`Assembly-CSharp/Memoria/Field/`](Assembly-CSharp/Memoria/Field/)
-> - El mod instalable: [`DynamicShadows/Mod/DynamicShadows/`](DynamicShadows/Mod/DynamicShadows/)
+> - **Project documentation: [DynamicShadows/README.md](DynamicShadows/README.md)**
+> - Engine code: [`Assembly-CSharp/Memoria/Field/`](Assembly-CSharp/Memoria/Field/)
+> - The installable mod: [`DynamicShadows/Mod/DynamicShadows/`](DynamicShadows/Mod/DynamicShadows/)
 >
-> Todo lo que hay debajo de esta línea es el README original de Memoria.
+> Everything below this line is Memoria's original README.
 
 ---
 

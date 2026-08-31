@@ -29,7 +29,7 @@ Write-Host "== Generating Blender projects ==" -ForegroundColor Cyan
 # treats the command as failed even when it exited with code 0. Blender sends its deprecation
 # warnings to stderr, so redirecting turns a harmless warning into an error.
 & $Blender --background --factory-startup --python $script -- $target |
-    Select-String -Pattern '^mapa |^Mapa |guardado en|desviacion maxima|\*\*\*' |
+    Select-String -Pattern '^map |^Map |saved to|median deviation|\*\*\*' |
     ForEach-Object { $_.Line }
 
 if ($LASTEXITCODE -ne 0) { throw "Blender exited with code $LASTEXITCODE" }

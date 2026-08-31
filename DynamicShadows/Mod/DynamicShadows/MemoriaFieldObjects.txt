@@ -1,91 +1,92 @@
-# Objetos personalizados por mapa. Se relee al cargar cada field: para probar
-# posiciones basta con salir del mapa y volver a entrar, sin recompilar.
+# Per-map custom objects. Re-read on every field load: to try out positions it is
+# enough to leave the map and walk back in, with no rebuild.
 #
-# Formato:  <fldMapNo> <modelo> <x> <y> <z> [escala] [LIT]
-#   LIT      lo dibuja la camara en perspectiva derivada, con shader Standard,
-#            luz real y sombras. Sin LIT usa la proyeccion PSX del juego.
-#   Modelos: GEO_NPC_F0_CUB (nuestro FBX, 100 unidades con escala 1)
-#            PRIMITIVE_CUBE / PRIMITIVE_PLANE (primitivos de Unity)
-#   '@' delante de la X: coordenadas relativas a bgi.charPos (ojo, no es el
-#   punto de entrada; en el mapa 150 vale (-1423,0,1347) y se anda en Z 23..430)
+# Format:  <fldMapNo> <model> <x> <y> <z> [scale] [LIT]
+#   LIT      drawn by the derived perspective camera, with the Standard shader,
+#            real light and shadows. Without LIT it uses the game's PSX projection.
+#   Models:  GEO_NPC_F0_CUB (our own FBX, 100 units at scale 1)
+#            PRIMITIVE_CUBE / PRIMITIVE_PLANE (Unity primitives)
+#   A '@' in front of the X makes the coordinates relative to bgi.charPos (careful,
+#   that is not the entry point; on map 150 it is (-1423,0,1347) and you walk in Z 23..430)
 #
-# Ajustes globales:
-#   SCENESCALE <factor>                             unidades de campo por unidad de escena
-#       El juego trabaja a ~340 unidades por metro (Steiner mide unas 593), lo
-#       que rompe todos los ajustes de Unity que van "por unidad": resolucion de
-#       lightmap, distancia de sombras, tamano de particulas, LOD. Modelando en
-#       metros y escalando aqui, esos valores por defecto vuelven a servir.
-#       Solo afecta al contenido de SCENEBUNDLE; los objetos LIT y el proxy del
-#       jugador siguen en coordenadas de campo.
-#   SCENEBUNDLE auto                                una escena por mapa, por convencion
-#       Carga <fldMapNo>.unity3d en cada mapa donde exista. El nombre del archivo
-#       ES la configuracion, asi que anadir un mapa es soltar su bundle en la
-#       carpeta del mod: nada que tocar aqui. Si no hay bundle, el mapa se juega
-#       normal y el log lo dice.
-#   SCENEBUNDLE <mapa> <archivo> [escena]           una escena concreta, para excepciones
-#       El bundle se busca en la raiz del juego y en cada carpeta de mod activa.
-#       Sin nombre de escena se usa la primera del bundle.
-#       Trae sus lightmaps y light probes; sus luces se limitan a la capa 3D y
-#       se le quitan las camaras que traiga.
-#   AMBIENT <r> <g> <b> [intensidad]                luz ambiental (0-1 por canal)
-#       Con el escenario horneado en Blender, la ambiental sostiene el albedo y
-#       la direccional se baja: esta solo para el personaje y su sombra.
-#       El tinte del mapa sale en el DUMP del jugador, en su material _Color.
-#   LIGHT <eulerX> <eulerY> <eulerZ> [intensidad]   luz direccional del pase 3D
-#   SHADOWDISTANCE auto | <unidades>                hasta donde hay sombras
-#       "auto" la mide en cada mapa: el doble de la distancia de la camara a lo mas
-#       lejano que tenga que proyectar. Un numero fijo no puede valer para todos,
-#       porque la camara esta a 3000 unidades del jugador en un mapa y a 6400 en
-#       otro, y lo que queda fuera del limite simplemente no proyecta -sin avisar,
-#       con la geometria, las luces y el shader perfectos-.
-#   PLAYER3D off|shadow|full|only                   mete al personaje en el pase 3D
-#       shadow: se sigue dibujando con PSX pero proyecta sombra real
-#       full:   ademas se redibuja en el pase 3D (se vera duplicado sobre el PSX)
-#       only:   se apaga el render PSX del personaje y solo queda el del pase 3D,
-#               con lo que comparte z-buffer real con la geometria 3D
-#   CHARLIGHT <ganancia>                            cuanta luz reciben los personajes
-#       Se aplica tinendo el material con el que el juego ya los dibuja: su shader
-#       calcula tex * (colorVertice * _Color), asi que multiplicar _Color es el
-#       mando que ya entiende. Conservan sus colores, su recorte alfa y su orden
-#       contra todo lo demas, y solo se oscurecen o toman el tono de una luz
-#       cercana. Es un color por personaje, no por pixel; para los modelos planos
-#       de FFIX esa es la resolucion correcta.
-#       Es una ganancia sobre la DESVIACION respecto a lo normal, y no tiene tope:
-#       0 los deja identicos al juego, 1 aplica la luz tal cual la calcula la escena,
-#       y por encima de 1 la exagera. Ese es el unico mando: las luces se quedan
-#       como esten en la escena de Unity, y esto decide cuanto llegan al personaje.
-#       Oscurecerse en sombra necesita COLLIDERS en la geometria de la escena: la
-#       sombra se resuelve con un raycast porque el shadow map no se puede
-#       consultar desde script. El log avisa si no los hay.
-#       Las luces puntuales tinen sin necesidad de colliders.
+# Global settings:
+#   SCENESCALE <factor>                             field units per scene unit
+#       The game works at ~340 units per metre (Steiner is about 593 tall), which
+#       breaks every Unity setting that goes "per unit": lightmap resolution,
+#       shadow distance, particle size, LOD. Modelling in metres and scaling here
+#       brings those defaults back into a usable range.
+#       It only affects SCENEBUNDLE content; LIT objects and the player proxy stay
+#       in field coordinates.
+#   SCENEBUNDLE auto                                one scene per map, by convention
+#       Loads <fldMapNo>.unity3d on every map that has one. The file name IS the
+#       configuration, so adding a map means dropping its bundle into the mod
+#       folder: nothing to edit here. With no bundle the map plays normally and
+#       the log says so.
+#   SCENEBUNDLE <map> <file> [scene]                one specific scene, for exceptions
+#       The bundle is looked up in the game root and in every active mod folder.
+#       Without a scene name the first one in the bundle is used.
+#       It brings its own lightmaps and light probes; its lights are restricted to
+#       the 3D layer and any cameras it carries are stripped.
+#   AMBIENT <r> <g> <b> [intensity]                 ambient light (0-1 per channel)
+#       With the scenery baked in Blender, ambient carries the albedo and the
+#       directional is turned down: that one is only there for the character and
+#       their shadow. The map's tint shows up in the player DUMP, in _Color.
+#   LIGHT <eulerX> <eulerY> <eulerZ> [intensity]    directional light of the 3D pass
+#   SHADOWDISTANCE auto | <units>                   how far shadows reach
+#       "auto" measures it on every map: twice the distance from the camera to the
+#       furthest thing it has to cast onto. A fixed number cannot work for all of
+#       them, because the camera is 3000 units from the player on one map and 6400
+#       on another, and whatever falls outside the limit simply does not cast -with
+#       no warning, and with the geometry, the lights and the shader all perfect.
+#   PLAYER3D off|shadow|full|only                   puts the character into the 3D pass
+#       shadow: still drawn with PSX but casts a real shadow
+#       full:   also redrawn in the 3D pass (will look doubled over the PSX one)
+#       only:   the character's PSX render is turned off and only the 3D pass one
+#               remains, sharing a real z-buffer with the 3D geometry
+#   CHARLIGHT <gain>                                how much light characters receive
+#       Applied by tinting the material the game already draws them with: their
+#       shader computes tex * (vertexColour * _Color), so multiplying _Color is the
+#       control it already understands. They keep their colours, their alpha cutout
+#       and their ordering against everything else, and only darken or take on the
+#       hue of a nearby light. It is one colour per character, not per pixel; for
+#       FFIX's flat models that is the correct resolution.
+#       It is a gain on the DEVIATION from normal, and it has no ceiling: 0 leaves
+#       them identical to the game, 1 applies the light exactly as the scene
+#       computes it, and above 1 exaggerates it. That is the only control: the
+#       lights stay however they are in the Unity scene, and this decides how much
+#       of them reaches the character.
+#       Darkening in shadow needs COLLIDERS on the scene geometry: the shadow is
+#       resolved with a raycast because the shadow map cannot be queried from
+#       script. The log warns when there are none.
+#       Point lights tint without needing colliders.
 #
-# Palabras clave de diagnostico:
-#   MASKDEBUG [on|off]  pinta de verde el proxy del personaje, encima del render
-#           del juego. Sirve para separar dos fallos que en pantalla se ven igual:
-#           si el verde se sale de su silueta, la mascara no casa; si encaja
-#           exactamente, la mascara esta bien y el problema es la sombra.
-#   SHADOWBIAS <bias> [normalBias]  sesgo de sombra de las luces del pase 3D.
-#           Unity lo expresa relativo al texel del shadow map, asi que crece con
-#           SHADOWDISTANCE: a las distancias que pide un field, el valor por
-#           defecto (0.05 / 0.4) se vuelve enorme en unidades de mundo y la
-#           sombra se despega de los pies. Prueba 0.01 0.1.
-#   TRACE   posicion del jugador en Memoria.log mientras andas
-#   DUMP    renderers y materiales de lo spawneado y del jugador
-#   CAMERA  compara la proyeccion PSX con la de la camara derivada
-#   PROBE   shaders y capacidades de sombra disponibles en el build
+# Diagnostic keywords:
+#   MASKDEBUG [on|off]  paints the character proxy green, over the game's render.
+#           It separates two faults that look identical on screen: if the green
+#           spills outside their silhouette the mask does not match; if it fits
+#           exactly, the mask is fine and the problem is the shadow.
+#   SHADOWBIAS <bias> [normalBias]  shadow bias of the 3D pass lights.
+#           Unity expresses it relative to the shadow map texel, so it grows with
+#           SHADOWDISTANCE: at the distances a field needs, the default (0.05 /
+#           0.4) becomes enormous in world units and the shadow detaches from the
+#           feet. Try 0.01 0.1.
+#   TRACE   player position in Memoria.log while walking
+#   DUMP    renderers and materials of what was spawned and of the player
+#   CAMERA  compares the PSX projection with the derived camera's
+#   PROBE   shaders and shadow capabilities available in this build
 #
-# EXPORTSCENE  vuelca el mapa actual en MemoriaSceneExport/<mapa>/ con la camara
-#              (field.json), el fondo limpio (background.png) y la malla de
-#              colision (walkmesh.obj). Luego, para montar el proyecto Blender:
+# EXPORTSCENE  dumps the current map into MemoriaSceneExport/<map>/ with the camera
+#              (field.json), the clean background (background.png) and the collision
+#              mesh (walkmesh.obj). Then, to build the Blender project:
 #                blender --background --factory-startup ^
 #                  --python DynamicShadows/Tools/blender/build_field_project.py -- ^
-#                  "<ruta del juego>/MemoriaSceneExport/150"
+#                  "<game path>/MemoriaSceneExport/150"
 #
-# Eje Y: en coordenadas de campo +Y es ARRIBA (lo confirma charAimHeight, que se
-# suma para elevar el punto de mira, y el TRACE subiendo escaleras). Con Y=0 el
-# objeto queda centrado en el suelo; sube el valor para levantarlo.
+# Y axis: in field coordinates +Y is UP (confirmed by charAimHeight, which is added
+# to raise the aim point, and by TRACE while climbing stairs). At Y=0 the object
+# sits centred on the floor; raise the value to lift it.
 #
-# Cast. Alex./Guardia = mapa 150
+# Cast. Alex./Guard = map 150
 
 TRACE
 CAMERA
@@ -93,42 +94,40 @@ EXPORTSCENE
 SHADOWDISTANCE auto
 AMBIENT 0.15 0.15 0.13 1.0
 MASKDEBUG off
-# Diagnostico del pase de luces adicionales del catcher.
-#   1 rojo plano, 2 solo la sombra (negro donde la luz esta bloqueada),
-#   3 solo el alcance (negro donde la lampara no llega), 4 el factor final,
-#   off para quitarlo.
+# Diagnostics for the catcher's additive light pass.
+#   1 flat red, 2 shadow only (black where the light is blocked),
+#   3 reach only (black where the lamp does not arrive), 4 the final factor,
+#   off to turn it off.
 CATCHERDEBUG off
 
-# Con SCENEBUNDLE la direccional la trae la escena, y el cargador le limita el
-# cullingMask a la capa 3D, asi que tambien ilumina al personaje. Dejar LIGHT
-# activo aqui pondria una segunda direccional encima. Solo se usa sin bundle.
+# With SCENEBUNDLE the directional comes from the scene, and the loader restricts
+# its cullingMask to the 3D layer, so it lights the character too. Leaving LIGHT
+# active here would add a second directional on top. Only used without a bundle.
 # LIGHT 50 -30 0 0.6
-# Prueba del shadow catcher: el personaje lo sigue dibujando el juego con su render PSX de
-# siempre, y lo unico que aporta el pase 3D es su silueta en el shadow map. Asi el fondo y el
-# personaje quedan intactos y lo unico nuevo en pantalla es la sombra.
+# Shadow catcher test: the character is still drawn by the game with its usual PSX render, and all
+# the 3D pass contributes is their silhouette in the shadow map. That way the background and the
+# character are untouched and the only new thing on screen is the shadow.
 PLAYER3D shadow
 
-# El unico mando de iluminacion de personajes. En zona normal no cambia nada valga lo que valga;
-# solo amplifica las desviaciones: entrar en sombra, o acercarse a una llama. Sube o baja este
-# numero y ya esta. Las luces se quedan como esten en la escena.
+# The single character-lighting control. In a normal area it changes nothing whatever its value;
+# it only amplifies deviations: walking into shadow, or up to a flame. Raise or lower this number
+# and that is all. The lights stay however they are in the scene.
 CHARLIGHT 1.0
-# Hito 3, cuando la sombra ya este bien: PLAYER3D only + CHARLIGHT 0 tiene que
-# verse IDENTICO al render del juego.
+# Milestone 3, once the shadow is right: PLAYER3D only + CHARLIGHT 0 has to look
+# IDENTICAL to the game's render.
 # CHARLIGHT 0
 
-# Estos dos los trae ahora el bundle en las mismas coordenadas: si se dejan
-# activos se solapan con los de la escena y no sabrias cual estas viendo.
+# These two now come from the bundle at the same coordinates: leaving them active
+# would overlap the ones in the scene and you would not know which you are seeing.
 # 150 PRIMITIVE_PLANE -700 0 200 120.0 LIT
 # 150 PRIMITIVE_CUBE  -700 80 500 80.0 LIT
 
-# Escena de Unity, modelada en metros. Una posicion de campo P se coloca en
-# Unity en P/345 (el TRACE ya te da las dos cifras).
+# Unity scene, modelled in metres. A field position P goes into Unity at P/345
+# (TRACE already gives you both figures).
 #
-# El 345 NO es a ojo: FF9BattleDBHeightAndRadius da la altura de cada modelo,
-# y la de Steiner (GEO_MAIN_F0_STN, id 5489) es 603 unidades de campo.
-#     factor = 603 / altura_en_metros    ->    603 / 1.75 = 345
-# Lo unico opinable es que estatura se le asigna: 1.70 -> 355, 1.80 -> 335.
+# The 345 is NOT eyeballed: FF9BattleDBHeightAndRadius gives each model's height,
+# and Steiner's (GEO_MAIN_F0_STN, id 5489) is 603 field units.
+#     factor = 603 / height_in_metres    ->    603 / 1.75 = 345
+# The only debatable part is what height to assign: 1.70 -> 355, 1.80 -> 335.
 SCENESCALE 345
-# Escena de Unity por mapa: <fldMapNo>.unity3d. La iluminacion la decide la escena.
 SCENEBUNDLE auto
-

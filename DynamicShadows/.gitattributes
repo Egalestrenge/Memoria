@@ -1,7 +1,7 @@
-# El .gitattributes de Memoria pone "* text=auto" para todo el repo. Aquí hay
-# formatos binarios cuya deteccion automatica no conviene dejar al azar: una
-# normalizacion de saltos de linea sobre un FBX o un bundle lo corrompe en
-# silencio y solo se nota al abrirlo en Unity.
+# Memoria's .gitattributes sets "* text=auto" for the whole repo. There are binary
+# formats here whose auto-detection is better not left to chance: a line-ending
+# normalisation applied to an FBX or a bundle corrupts it silently, and it only
+# shows up when opening it in Unity.
 *.unity     binary
 *.unity3d   binary
 *.fbx       binary
@@ -12,8 +12,8 @@
 *.png       binary
 *.tga       binary
 
-# Los scripts de PowerShell y Python, y los .txt de configuracion que lee el
-# juego, sí son texto y se normalizan.
+# The PowerShell and Python scripts, and the .txt configuration the game reads,
+# are text and do get normalised.
 *.ps1       text
 *.py        text
 *.cs        text

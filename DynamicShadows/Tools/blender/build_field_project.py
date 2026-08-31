@@ -1,11 +1,10 @@
-# Construye un proyecto de Blender a partir de lo que exporta EXPORTSCENE:
-# camara colocada como la del juego, fondo del mapa encuadrado en esa camara,
-# walkmesh como malla, y todo a escala metrica.
+# Builds a Blender project from what EXPORTSCENE dumps: the camera placed like the game's, the map
+# background framed in that camera, the walkmesh as a mesh, and everything at metric scale.
 #
-# Uso (desde la raiz del proyecto):
-#   blender --background --factory-startup --python DynamicShadows/Tools/blender/build_field_project.py -- <carpeta_export> [salida.blend]
+# Usage (from the repo root):
+#   blender --background --factory-startup --python DynamicShadows/Tools/blender/build_field_project.py -- <export_folder> [output.blend]
 #
-# Ejemplo:
+# Example:
 #   blender --background --factory-startup --python DynamicShadows/Tools/blender/build_field_project.py -- ^
 #       "C:/Program Files (x86)/Steam/steamapps/common/FINAL FANTASY IX/MemoriaSceneExport/150"
 
@@ -21,16 +20,16 @@ from mathutils import Matrix, Vector
 
 
 def unity_to_blender(v):
-    """Campo (zurdo, Y arriba) -> Blender (diestro, Z arriba).
+    """Field (left-handed, Y up) -> Blender (right-handed, Z up).
 
-    Intercambiar Y y Z es una permutacion impar (determinante -1), y ese cambio
-    de quiralidad es el que hace falta entre sistemas de distinta mano.
+    Swapping Y and Z is an odd permutation (determinant -1), and that change of
+    handedness is exactly what is needed between systems of opposite chirality.
 
-    Las negaciones de X y Z salen de medirlo: marcadores colocados en ejes
-    conocidos y llevados por Blender -> FBX -> Unity -> juego volvian con X y Z
-    cambiadas de signo. Es una rotacion de 180 grados sobre el eje vertical
-    (determinante +1), que introduce la cadena de exportacion FBX. Compensarla
-    aqui deja el viaje de ida y vuelta exacto.
+    The X and Z negations come from measurement: markers placed on known axes and
+    carried through Blender -> FBX -> Unity -> game came back with X and Z sign
+    flipped. That is a 180 degree rotation about the vertical axis (determinant
+    +1), introduced by the FBX export chain. Compensating for it here makes the
+    round trip exact.
     """
     return Vector((-v[0], -v[2], v[1]))
 
@@ -39,7 +38,7 @@ def read_export(folder, name="field.json"):
     with open(os.path.join(folder, name), "r", encoding="utf-8") as handle:
         data = json.load(handle)
     data["_folder"] = folder
-    # La camara 0 se escribio sin sufijo, para no romper los proyectos ya hechos.
+    # Camera 0 was written without a suffix, so as not to break existing projects.
     suffix = "" if name == "field.json" else name[len("field"):-len(".json")]
     data["_suffix"] = suffix
     data["_background"] = "background%s.png" % suffix
@@ -47,11 +46,11 @@ def read_export(folder, name="field.json"):
 
 
 def read_exports(folder):
-    """Todas las camaras volcadas de un mapa, ordenadas por indice.
+    """Every camera dumped for a map, ordered by index.
 
-    Un field no es una vista: BGSCENE guarda una lista de BGCAM_DEF y el juego cambia entre ellas,
-    asi que la misma habitacion puede tener varios fondos y varias proyecciones. La geometria es la
-    misma; lo unico que cambia es desde donde se mira.
+    A field is not one view: BGSCENE holds a list of BGCAM_DEF and the game switches between them,
+    so the same room can have several backgrounds and several projections. The geometry is the same;
+    the only thing that changes is where it is looked at from.
     """
     names = ["field.json"] if os.path.exists(os.path.join(folder, "field.json")) else []
     names += sorted(n for n in os.listdir(folder)
@@ -60,25 +59,26 @@ def read_exports(folder):
 
 
 def camera_geometry(data):
-    """Lo que hace falta para reproducir la camara del juego en Blender.
+    """What is needed to reproduce the game camera in Blender.
 
-    La base exportada es ortogonal pero NO ortonormal: |up| vale 1.0713. Ese
-    numero es 15/14, el estiramiento del framebuffer de 320x224 de PSX mostrado
-    en 4:3, y FFIX lo lleva dentro de la matriz de camara para que los modelos
-    casen con los fondos, que se pintaron para esa proporcion.
+    The exported basis is orthogonal but NOT orthonormal: |up| is 1.0713. That
+    number is 15/14, the stretch of the PSX 320x224 framebuffer shown at 4:3, and
+    FFIX carries it inside its camera matrix so that the models line up with the
+    backgrounds, which were painted for that ratio.
 
-    Una camara de Blender es ortonormal por construccion, asi que la escala hay
-    que sacarla de la base y ponerla donde le corresponde, en las tangentes del
-    campo de vision. El juego proyecta con la INVERSA de esta base, no con su
-    traspuesta, y para una base escalada no son lo mismo: la inversa divide por
-    el cuadrado de la norma. De ahi que el factor sea k/kz y no kz/k.
+    A Blender camera is orthonormal by construction, so the scale has to be taken
+    out of the basis and put where it belongs: in the field-of-view tangents. The
+    game projects with the INVERSE of this basis, not with its transpose, and for
+    a scaled basis those are not the same: the inverse divides by the square of
+    the norm. Hence the factor is k/kz and not kz/k.
 
-    Eso deja un aspecto angular (1.5257) que ya no coincide con el de pixeles
-    (1.6343). La diferencia se declara como pixel aspect, y sale 1.0711, el
-    reciproco de (4/3)/(320/224) = 0.93333 de PSX, que confirma de donde viene.
+    That leaves an angular aspect (1.5257) that no longer matches the pixel one
+    (1.6343). The difference is declared as pixel aspect, and comes out at 1.0711,
+    the reciprocal of the PSX (4/3)/(320/224) = 0.93333, which confirms where it
+    comes from.
 
-    Todo lo de aqui esta medido contra world_to_camera_view, no supuesto: la
-    proyeccion resultante cae a 0.0002 px de la del juego.
+    Everything here is measured against world_to_camera_view, not assumed: the
+    resulting projection lands within 0.0002 px of the game's.
     """
     right = Vector(data["right"])
     up = Vector(data["up"])
@@ -91,18 +91,18 @@ def camera_geometry(data):
 
     width = float(data["renderWidth"])
     height = float(data["renderHeight"])
-    # Cuanto hay que corregir el aspecto de pixeles para llegar al angular.
-    # Blender solo expresa el pixel aspect en el eje que queda >= 1: poner el
-    # otro por debajo de 1 no hace absolutamente nada.
+    # How much the pixel aspect has to be corrected to reach the angular one.
+    # Blender only expresses pixel aspect on the axis that ends up >= 1: putting
+    # the other one below 1 does absolutely nothing.
     needed = (width / height) / angular_aspect
     if needed >= 1.0:
         pixel_aspect_x, pixel_aspect_y = 1.0, needed
     else:
         pixel_aspect_x, pixel_aspect_y = 1.0 / needed, 1.0
 
-    # Blender aplica el shift con el signo contrario al desplazamiento de
-    # encuadre del juego. En Y el factor es el aspecto angular, no el de
-    # pixeles: medido, d(u)/d(shift_x) = -1 y d(v)/d(shift_y) = -1.5257.
+    # Blender applies the shift with the opposite sign to the game's frame
+    # offset. On Y the factor is the angular aspect, not the pixel one: measured,
+    # d(u)/d(shift_x) = -1 and d(v)/d(shift_y) = -1.5257.
     shift_x = -data["ndcOffsetX"] / 2.0
     shift_y = -data["ndcOffsetY"] / 2.0 / angular_aspect
 
@@ -122,11 +122,11 @@ def camera_geometry(data):
 
 
 def set_target_collection(collection):
-    """Hace activa una coleccion, que es donde caeran los objetos que se creen a partir de ahora.
+    """Makes a collection active, which is where objects created from now on will land.
 
-    Los constructores enlazan en bpy.context.collection, asi que basta con mover el puntero de la
-    vista antes de llamarlos. Se busca en la capa de vista de la escena activa: la coleccion tiene
-    que estar ya enlazada en ella.
+    The constructors link into bpy.context.collection, so it is enough to move the view pointer
+    before calling them. The lookup happens in the active scene view layer: the collection has to be
+    linked there already.
     """
     layer = bpy.context.view_layer.layer_collection
     for child in layer.children:
@@ -140,7 +140,7 @@ def build_camera(data, geo, name="FieldCamera"):
     position = unity_to_blender(data["position"]) / data["sceneScale"]
     right = unity_to_blender(geo["right"])
     up = unity_to_blender(geo["up"])
-    # La camara de Blender mira por su -Z local; la de Unity por su +Z.
+    # A Blender camera looks down its local -Z; a Unity one down its +Z.
     back = -unity_to_blender(geo["forward"])
 
     camera_data = bpy.data.cameras.new(name)
@@ -164,22 +164,22 @@ def build_camera(data, geo, name="FieldCamera"):
 
 
 def background_scale(data):
-    """Cuantas veces el encuadre abarca background.png.
+    """How many times the frame spans background.png.
 
-    El exportador captura el fondo entero, no solo lo que cabe en pantalla: un fondo de field es
-    mayor que la ventana y el juego hace scroll moviendo la camara ortografica. La imagen crece por
-    igual en los dos ejes y centrada en el encuadre, que es lo que permite colocarla con una sola
-    escala uniforme y sin desplazamiento.
+    The exporter captures the whole background, not only what fits on screen: a field background is
+    larger than the window and the game scrolls by moving the orthographic camera. The image grows
+    equally on both axes and centred on the frame, which is what allows placing it with a single
+    uniform scale and no offset.
     """
     return float(data.get("backgroundScale", 1.0))
 
 
 def frame_corners(data, geo, camera, distance, span=1.0):
-    """Las cuatro esquinas del encuadre a una distancia dada, en coordenadas de mundo.
+    """The four frame corners at a given distance, in world coordinates.
 
-    Se obtienen invirtiendo la proyeccion:
+    They come from inverting the projection:
         ndc.x = (vx / -vz) / tan_x + offset   ->   vx = (ndc.x - offset) * tan_x * d
-    y se pueden verificar reproyectandolas, que es lo que hace main().
+    and can be verified by reprojecting them, which is what main() does.
     """
     corners = []
     for ndc_x, ndc_y in ((-span, -span), (span, -span), (span, span), (-span, span)):
@@ -193,13 +193,13 @@ def frame_corners(data, geo, camera, distance, span=1.0):
 
 
 def attach_camera_layers(data, camera, image):
-    """Capas de fondo sobre la camara: no son geometria, asi que nunca las tapa lo
-    que se modele, y se activan con un clic en las propiedades de la camara.
+    """Background layers on the camera: they are not geometry, so nothing you model
+    ever covers them, and they toggle with one click in the camera properties.
 
-    Sin offset. La imagen se ajusta al encuadre de la camara, y ese encuadre ya
-    lleva el lens shift, asi que coincide con el render sin corregir nada. El
-    desfase que se veia antes no era de la imagen: era la camara, que tenia el
-    shift con el signo cambiado y una escala del 7% en su eje Y.
+    No offset. The image is fitted to the camera frame, and that frame already
+    carries the lens shift, so it matches the render with nothing to correct. The
+    misalignment seen earlier was not the image: it was the camera, which had the
+    shift sign flipped and a 7% scale on its Y axis.
     """
     camera.data.show_background_images = True
 
@@ -208,12 +208,12 @@ def attach_camera_layers(data, camera, image):
         layer.image = image
         layer.alpha = alpha
         layer.display_depth = depth
-        # STRETCH y no FIT: la imagen y el encuadre tienen ya la misma proporcion,
-        # y asi ningun redondeo mete bandas por los lados.
+        # STRETCH and not FIT: the image and the frame already share the same ratio,
+        # and this way no rounding introduces bands at the sides.
         layer.frame_method = "STRETCH"
         layer.offset = (0.0, 0.0)
-        # STRETCH ajusta la imagen al encuadre y scale la agranda uniformemente desde el centro,
-        # que es exactamente como esta capturada: sin desplazamiento que corregir.
+        # STRETCH fits the image to the frame and scale grows it uniformly from the centre, which
+        # is exactly how it was captured: with no offset to correct.
         layer.scale = background_scale(data)
         if hasattr(layer, "show_background_image"):
             layer.show_background_image = enabled
@@ -226,7 +226,7 @@ def attach_camera_layers(data, camera, image):
 def attach_background(data, geo, camera, distance, name="BackgroundPlate"):
     path = os.path.join(data["_folder"], data.get("_background", "background.png"))
     if not os.path.exists(path):
-        print("Sin background.png, se omite el fondo.")
+        print("No background.png, skipping the background.")
         return None
     image = bpy.data.images.load(path)
 
@@ -239,8 +239,8 @@ def attach_background(data, geo, camera, distance, name="BackgroundPlate"):
         uv.data[i].uv = coord
 
     material = bpy.data.materials.new(name)
-    # use_nodes desaparece en Blender 6.0. En las versiones donde el material ya nace con arbol
-    # de nodos no hay nada que activar, y tocarlo solo produce el aviso de deprecacion.
+    # use_nodes goes away in Blender 6.0. In versions where a material is born with a node tree
+    # there is nothing to enable, and touching it only produces the deprecation warning.
     if getattr(material, "node_tree", None) is None:
         material.use_nodes = True
     nodes = material.node_tree.nodes
@@ -257,8 +257,8 @@ def attach_background(data, geo, camera, distance, name="BackgroundPlate"):
 
     plate = bpy.data.objects.new(name, mesh)
     bpy.context.collection.objects.link(plate)
-    # Patron de referencia con encuadre verificado. Se queda oculto: para trabajar
-    # estan las capas de camara, que no las tapa la geometria.
+    # Reference plate with a verified frame. Left hidden: for actual work there are the camera
+    # layers, which geometry never covers.
     plate.hide_select = True
     plate.hide_render = False
     plate.hide_viewport = True
@@ -270,7 +270,7 @@ def attach_background(data, geo, camera, distance, name="BackgroundPlate"):
 def build_walkmesh(data):
     path = os.path.join(data["_folder"], "walkmesh.obj")
     if not os.path.exists(path):
-        print("Sin walkmesh.obj, se omite la malla de colision.")
+        print("No walkmesh.obj, skipping the collision mesh.")
         return None
 
     scale = data["sceneScale"]
@@ -296,18 +296,18 @@ def build_walkmesh(data):
     bpy.context.collection.objects.link(obj)
     obj.display_type = "WIRE"
     obj.show_wire = True
-    # Es una referencia de navegacion, no geometria del escenario.
+    # It is a navigation reference, not scenery geometry.
     obj.hide_render = True
     return obj
 
 
 def build_reference_markers(data, walkmesh):
-    """Marcadores para validar el viaje de ida y vuelta Blender -> FBX -> Unity.
+    """Markers to validate the Blender -> FBX -> Unity round trip.
 
-    Es el unico tramo de la cadena que no se puede comprobar desde aqui: Blender
-    y Unity tienen quiralidad distinta, y segun los ajustes de exportacion el
-    eje de profundidad puede acabar invertido. Exportando estos marcadores y
-    mirando donde caen en el juego se resuelve de una vez.
+    It is the only leg of the chain that cannot be checked from here: Blender and
+    Unity have opposite chirality, and depending on the export settings the depth
+    axis can end up flipped. Exporting these markers and looking at where they
+    land in the game settles it once and for all.
     """
     scale = data["sceneScale"]
     markers = []
@@ -318,7 +318,7 @@ def build_reference_markers(data, walkmesh):
     origin.location = (0.0, 0.0, 0.0)
     bpy.context.collection.objects.link(origin)
 
-    # Tres puntos separados en ejes distintos: si alguno se invierte, se ve.
+    # Three points spread on different axes: if any one flips, it shows.
     field_points = [("X", (1000.0, 0.0, 0.0)), ("Y", (0.0, 500.0, 0.0)), ("Z", (0.0, 0.0, 1000.0))]
     for name, field in field_points:
         mesh = bpy.data.meshes.new("RefMarker" + name)
@@ -337,15 +337,15 @@ def build_reference_markers(data, walkmesh):
 
 
 def verify_projection(data, camera, walkmesh):
-    """Proyecta el walkmesh con la camara de Blender y lo compara con el juego.
+    """Projects the walkmesh with the Blender camera and compares it against the game.
 
-    La verdad de referencia se reconstruye con la INVERSA de la base exportada,
-    que es lo que aplica el juego. Usar la traspuesta parece equivalente y no lo
-    es en cuanto la base tiene escala: el error se cuela en los dos lados de la
-    comparacion y esta cuadra estando mal.
+    The ground truth is rebuilt with the INVERSE of the exported basis, which is
+    what the game applies. Using the transpose looks equivalent and is not, as
+    soon as the basis has scale: the error slips into both sides of the comparison
+    and it agrees while being wrong.
 
-    Se ejecuta siempre. Si algun dia cambia el exportador o una version de
-    Blender mueve un convenio, esto lo dice en la misma ejecucion.
+    It always runs. If the exporter ever changes, or a Blender version moves a
+    convention, this says so in the same run.
     """
     if walkmesh is None:
         return None
@@ -380,10 +380,10 @@ def verify_projection(data, camera, walkmesh):
     if not errors_x:
         return None
 
-    # La mediana, no el maximo. En un mapa con la camara cerca y el campo de vision ancho hay
-    # vertices del walkmesh casi pegados al plano de la camara, y ahi la division en perspectiva
-    # amplia cualquier diferencia de coma flotante: el maximo se dispara mientras el mapa entero
-    # esta exacto. Medido en el 153: mediana 0.16 px y maximo 2.87 px, con la camara correcta.
+    # The median, not the maximum. On a map with the camera close and a wide field of view there
+    # are walkmesh vertices almost against the camera plane, and there the perspective divide
+    # magnifies any floating-point difference: the maximum spikes while the whole map is exact.
+    # Measured on 153: median 0.16 px and maximum 2.87 px, with the camera correct.
     errors_x.sort()
     errors_y.sort()
     middle = len(errors_x) // 2
@@ -395,13 +395,13 @@ def check_one(data, camera, walkmesh):
     if not check:
         return
     count, median_x, median_y, worst_x, worst_y = check
-    print("  camara      : %s vertices del walkmesh, desviacion tipica X %.4f px  Y %.4f px"
-          " (maxima %.2f / %.2f)" % (count, median_x, median_y, worst_x, worst_y))
+    print("  camera      : %s walkmesh vertices, median deviation X %.4f px  Y %.4f px"
+          " (max %.2f / %.2f)" % (count, median_x, median_y, worst_x, worst_y))
     if max(median_x, median_y) > 0.5:
-        print("  *** MAL. La camara no reproduce la del juego. ***")
+        print("  *** WRONG. This camera does not reproduce the game's. ***")
     elif max(worst_x, worst_y) > 2.0:
-        print("                (algun vertice suelto se dispara: los que caen casi sobre el plano")
-        print("                 de la camara, donde la perspectiva amplifica el redondeo.)")
+        print("                (a few stray vertices spike: the ones landing almost on the camera")
+        print("                 plane, where perspective magnifies rounding.)")
 
 
 def configure_scene(data, geo):
@@ -409,9 +409,9 @@ def configure_scene(data, geo):
     scene.render.resolution_x = data["renderWidth"]
     scene.render.resolution_y = data["renderHeight"]
     scene.render.resolution_percentage = 100
-    # El aspecto angular de la camara del juego no coincide con el de pixeles
-    # (herencia del 320x224 de PSX en 4:3). Sin esto la vista sale achatada un
-    # 6.6% en vertical y no hay offset que lo arregle.
+    # The game camera's angular aspect does not match its pixel aspect (inherited
+    # from the PSX 320x224 at 4:3). Without this the view comes out squashed by
+    # 6.6% vertically and no offset fixes it.
     scene.render.pixel_aspect_x = geo["pixelAspectX"]
     scene.render.pixel_aspect_y = geo["pixelAspectY"]
     scene.unit_settings.system = "METRIC"
@@ -421,28 +421,28 @@ def configure_scene(data, geo):
 def main():
     argv = sys.argv[sys.argv.index("--") + 1:]
     if not argv:
-        raise SystemExit("Falta la carpeta de exportacion (MemoriaSceneExport/<mapa>)")
+        raise SystemExit("Missing the export folder (MemoriaSceneExport/<map>)")
 
     root = os.path.abspath(argv[0])
 
-    # Una carpeta sin field.json pero con subcarpetas que si lo tienen es la raiz del volcado:
-    # se procesan todas. EXPORTSCENE deja un mapa cada vez que entras en uno, asi que a poco que
-    # juegues se acumulan, y hacerlos de uno en uno no escala.
+    # A folder with no field.json but with subfolders that do have one is the dump root: all of
+    # them get processed. EXPORTSCENE leaves a map behind every time you enter one, so they pile up
+    # as soon as you play at all, and doing them one by one does not scale.
     if not os.path.exists(os.path.join(root, "field.json")):
         pending = sorted(name for name in os.listdir(root)
                          if os.path.exists(os.path.join(root, name, "field.json")))
         if not pending:
-            raise SystemExit("En %s no hay ningun field.json, ni suelto ni en subcarpetas." % root)
+            raise SystemExit("No field.json in %s, neither loose nor in subfolders." % root)
         for name in pending:
             folder = os.path.join(root, name)
             exports = read_exports(folder)
             data = exports[0]
             output = os.path.join(folder, "field_%s.blend" % data["map"])
-            # No se pisa un proyecto que ya existe: puede tener modelado dentro, y este script
-            # arranca de una escena vacia. Para actualizar uno sin perder el trabajo esta
+            # An existing project is never overwritten: it may hold modelling work, and this
+            # script starts from an empty scene. To update one without losing that work there is
             # update_field_project.py.
             if os.path.exists(output):
-                print("mapa %s: ya existe %s, se omite (usa update_field_project.py para actualizarlo)"
+                print("map %s: %s already exists, skipping (use update_field_project.py to update it)"
                       % (name, os.path.basename(output)))
                 continue
             build_project(exports, folder, output)
@@ -455,19 +455,20 @@ def main():
 
 
 def build_project(exports, folder, output):
-    """Un archivo con la geometria compartida y una escena de Blender por camara.
+    """One file with the shared geometry and one Blender scene per camera.
 
-    La resolucion y el pixel aspect son de la ESCENA, no de la camara, y cada BGCAM puede tener
-    encuadre propio: no caben dos en una sola escena.
+    Resolution and pixel aspect belong to the SCENE, not to the camera, and each BGCAM can have its
+    own framing: two of them do not fit in a single scene.
 
-    Lo que las une es una COLECCION, no una copia de escena. Aqui hubo un scene.new(LINK_COPY) y
-    estaba mal por dos motivos, los dos comprobados abriendo el archivo generado: copia la lista de
-    objetos en el instante en que se crea, asi que lo que modelases despues aparecia SOLO en la
-    escena activa -justo lo que se suponia que resolvia-, y ademas la segunda escena heredaba el
-    BackgroundPlate de la primera, un plano enorme con el fondo pintado plantado en mitad de la
-    sala. Con colecciones no hay instante que valga: "Escenario" se enlaza en todas las escenas y
-    todo lo que entre en ella aparece en todas, ahora y luego. Cada camara se lleva la suya, con su
-    camara y su fondo, enlazada solo en su escena.
+    What ties them together is a COLLECTION, not a scene copy. There used to be a
+    scene.new(LINK_COPY) here and it was wrong for two reasons, both confirmed by opening the
+    generated file: it copies the object list at the instant it is created, so anything modelled
+    afterwards appeared ONLY in the active scene -precisely what it was supposed to solve- and on
+    top of that the second scene inherited the first one's BackgroundPlate, a huge plate with the
+    background painted on it planted in the middle of the room. With collections there is no
+    instant to worry about: "Scenery" is linked into every scene and everything that goes into it
+    appears in all of them, now and later. Each camera carries its own collection, with its camera
+    and its background, linked only into its own scene.
     """
     bpy.ops.wm.read_factory_settings(use_empty=True)
 
@@ -476,19 +477,19 @@ def build_project(exports, folder, output):
     markers = []
     cameras = []
 
-    # Lo compartido. Es tambien donde tienes que modelar: lo que caiga fuera de esta coleccion solo
-    # se vera desde una de las camaras.
-    shared = bpy.data.collections.new("Escenario")
+    # The shared part. It is also where you have to model: anything landing outside this collection
+    # will only be visible from one of the cameras.
+    shared = bpy.data.collections.new("Scenery")
 
     for index, data in enumerate(exports):
         if index > 0:
             bpy.ops.scene.new(type="EMPTY")
         scene = bpy.context.scene
-        scene.name = "Camara %s" % data.get("cameraIndex", index)
+        scene.name = "Camera %s" % data.get("cameraIndex", index)
         scene.collection.children.link(shared)
 
-        # Lo propio de esta camara, que no debe verse desde las demas.
-        own = bpy.data.collections.new("Camara %s" % data.get("cameraIndex", index))
+        # This camera's own content, which must not be visible from the others.
+        own = bpy.data.collections.new("Camera %s" % data.get("cameraIndex", index))
         scene.collection.children.link(own)
 
         geo = camera_geometry(data)
@@ -498,12 +499,12 @@ def build_project(exports, folder, output):
         set_target_collection(own)
         camera = build_camera(data, geo, "FieldCamera%s" % suffix)
         if walkmesh is None:
-            # El walkmesh es del field, no de la camara: uno solo, compartido por las escenas.
+            # The walkmesh belongs to the field, not the camera: one only, shared by the scenes.
             set_target_collection(shared)
             walkmesh = build_walkmesh(data)
             markers = build_reference_markers(data, walkmesh)
 
-        # El plano va detras de todo el walkmesh para que no tape lo que modeles.
+        # The plate goes behind the whole walkmesh so it does not cover what you model.
         distance = 20.0
         if walkmesh:
             depths = [-(camera.matrix_world.inverted() @ v.co).z for v in walkmesh.data.vertices]
@@ -512,8 +513,8 @@ def build_project(exports, folder, output):
         plate = attach_background(data, geo, camera, distance, "BackgroundPlate%s" % suffix)
         cameras.append((data, geo, camera, plate, distance))
 
-    # Se guarda con la primera camara activa y con "Escenario" como coleccion activa, que es donde
-    # tiene que caer lo que se modele para que lo vean todas las camaras.
+    # Saved with the first camera active and "Scenery" as the active collection, which is where
+    # modelling has to land for every camera to see it.
     bpy.context.window.scene = bpy.data.scenes[0]
     set_target_collection(shared)
     bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(output))
@@ -526,38 +527,38 @@ def build_project(exports, folder, output):
 
     scale = data["sceneScale"]
     print("")
-    print("Mapa %s (%s), camara %s" % (data["map"], data["mapName"], data["cameraIndex"]))
-    print("  escala      : %s unidades de campo por metro" % scale)
+    print("Map %s (%s), camera %s" % (data["map"], data["mapName"], data["cameraIndex"]))
+    print("  scale       : %s field units per metre" % scale)
     print("  render      : %sx%s" % (data["renderWidth"], data["renderHeight"]))
-    print("  FOV horiz.  : %.2f grados" % math.degrees(data["fovXRadians"]))
+    print("  horiz. FOV  : %.2f degrees" % math.degrees(data["fovXRadians"]))
     print("  lens shift  : (%.4f, %.4f)" % (camera.data.shift_x, camera.data.shift_y))
-    print("  camara en   : (%.2f, %.2f, %.2f) m" % tuple(camera.location))
-    print("  aspecto     : angular %.5f, de pixeles %.5f  ->  pixel aspect (%.5f, %.5f)"
+    print("  camera at   : (%.2f, %.2f, %.2f) m" % tuple(camera.location))
+    print("  aspect      : angular %.5f, pixel %.5f  ->  pixel aspect (%.5f, %.5f)"
           % (geo["angularAspect"], data["renderWidth"] / float(data["renderHeight"]),
              geo["pixelAspectX"], geo["pixelAspectY"]))
-    print("  escala de la base exportada: |right| %.6f  |up| %.6f  |forward| %.6f"
+    print("  exported basis scale: |right| %.6f  |up| %.6f  |forward| %.6f"
           % geo["scales"])
     if walkmesh:
-        print("  walkmesh    : %s vertices, %s caras" % (len(walkmesh.data.vertices), len(walkmesh.data.polygons)))
+        print("  walkmesh    : %s vertices, %s faces" % (len(walkmesh.data.vertices), len(walkmesh.data.polygons)))
     if plate:
         span = background_scale(data)
-        print("  fondo       : capas de camara sin offset (escala %.3f), y BackgroundPlate a %.2f m" % (span, distance))
+        print("  background  : camera layers with no offset (scale %.3f), and BackgroundPlate at %.2f m" % (span, distance))
         if span > 1.0:
-            print("                background.png cubre %.1fx el encuadre: se ve tambien lo que queda" % span)
-            print("                fuera de camara, que es donde el fondo hace scroll.")
-    print("  guardado en : %s" % os.path.abspath(output))
+            print("                background.png covers %.1fx the frame: what lies outside the" % span)
+            print("                camera is visible too, which is where the background scrolls.")
+    print("  saved to    : %s" % os.path.abspath(output))
 
     if len(cameras) > 1:
-        print("  camaras     : %d, una escena de Blender por cada una (%s)"
+        print("  cameras     : %d, one Blender scene for each (%s)"
               % (len(cameras), ", ".join(sc.name for sc in bpy.data.scenes)))
-        print("                Se modela una vez, en la coleccion 'Escenario': esa esta enlazada")
-        print("                en todas, asi que lo que metas ahi lo ven todas las camaras. Cada")
-        print("                camara tiene ademas su propia coleccion con su camara y su fondo.")
+        print("                You model once, in the 'Scenery' collection: that one is linked into")
+        print("                all of them, so whatever you put there is seen by every camera. Each")
+        print("                camera also has its own collection with its camera and background.")
 
     for data, geo, camera, plate, distance in cameras:
         if len(cameras) > 1:
             print("")
-            print("  -- camara %s: render %sx%s, FOV %.2f grados"
+            print("  -- camera %s: render %sx%s, FOV %.2f degrees"
                   % (data.get("cameraIndex", 0), data["renderWidth"], data["renderHeight"],
                      math.degrees(data["fovXRadians"])))
         check_one(data, camera, walkmesh)
@@ -567,31 +568,31 @@ def build_project(exports, folder, output):
     if check:
         count, median_x, median_y, worst_x, worst_y = check
         print("")
-        print("Comprobacion 1 (la camara): %s vertices del walkmesh proyectados con la camara" % count)
-        print("de Blender contra la proyeccion del juego.")
-        print("  desviacion tipica:  X %.4f px   Y %.4f px   (maxima %.2f / %.2f)"
+        print("Check 1 (the camera): %s walkmesh vertices projected with the Blender" % count)
+        print("camera against the game's projection.")
+        print("  median deviation:  X %.4f px   Y %.4f px   (max %.2f / %.2f)"
               % (median_x, median_y, worst_x, worst_y))
         if max(median_x, median_y) > 0.5:
-            print("  *** MAL. La camara no reproduce la del juego. ***")
+            print("  *** WRONG. This camera does not reproduce the game's. ***")
         elif max(worst_x, worst_y) > 2.0:
-            print("  (algun vertice suelto se dispara: son los que caen casi sobre el plano de la")
-            print("   camara, donde la division en perspectiva amplifica el redondeo. No es la camara.)")
+            print("  (a few stray vertices spike: the ones landing almost on the camera plane,")
+            print("   where the perspective divide magnifies rounding. It is not the camera.)")
 
     print("")
-    print("Para modelar: Numpad 0. El fondo son dos capas de la camara, en")
-    print("Object Data Properties > Background Images. No son geometria, asi que")
-    print("no las tapa nada de lo que modeles:")
-    print("  - 'Back'  opaca y activa: se ve donde aun no hay geometria")
-    print("  - 'Front' al 35% y desactivada: actívala para calcar por encima del modelo")
-    print("BackgroundPlate es ese mismo fondo como geometria, oculto. Si quieres")
-    print("contrastar el encuadre de las capas, muestralo: deben coincidir.")
+    print("To model: Numpad 0. The background is two camera layers, under")
+    print("Object Data Properties > Background Images. They are not geometry, so")
+    print("nothing you model ever covers them:")
+    print("  - 'Back'  opaque and enabled: visible where there is no geometry yet")
+    print("  - 'Front' at 35% and disabled: enable it to trace over the model")
+    print("BackgroundPlate is that same background as geometry, hidden. If you want")
+    print("to check the layers framing against it, unhide it: they must match.")
     print("")
-    print("Comprobacion 2 (ida y vuelta a Unity): exporta los RefMarker en FBX, metelos")
-    print("en la escena de Unity sin moverlos y mira donde caen en el juego.")
+    print("Check 2 (Unity round trip): export the RefMarker objects to FBX, drop them")
+    print("into the Unity scene without moving them and look at where they land in game.")
     for name, field, blender_pos in markers:
-        print("  RefMarker%s  Blender (%.4f, %.4f, %.4f)  ->  campo esperado (%.0f, %.0f, %.0f)"
+        print("  RefMarker%s  Blender (%.4f, %.4f, %.4f)  ->  expected field (%.0f, %.0f, %.0f)"
               % (name, blender_pos[0], blender_pos[1], blender_pos[2], field[0], field[1], field[2]))
-    print("  En Unity deben quedar en campo/%s, y el log del juego lo confirma." % scale)
+    print("  In Unity they must land at field/%s, and the game log confirms it." % scale)
 
 
 if __name__ == "__main__":
