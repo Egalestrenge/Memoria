@@ -76,6 +76,18 @@ def main():
         if is_owned(name):
             homes[name] = collections_of(bpy.data.objects[name])
 
+    # How each camera's background layers were being displayed. attach_camera_layers recreates
+    # them from scratch with the defaults, so without this an update quietly undoes the one thing
+    # you are meant to change by hand: putting the reference in FRONT at partial alpha to trace
+    # over the model. Losing that on every refresh is not acceptable.
+    layer_prefs = {}
+    for name in list(bpy.data.objects.keys()):
+        obj = bpy.data.objects[name]
+        if is_owned(name) and obj.type == "CAMERA":
+            layer_prefs[name] = [
+                (l.alpha, l.display_depth, getattr(l, "show_background_image", True))
+                for l in obj.data.background_images]
+
     # Which scene each camera drives, so it can be pointed at the rebuilt one.
     scene_of = {}
     for name in homes:
@@ -132,6 +144,14 @@ def main():
         plate = bfp.attach_background(data, geo, camera, distance, plate_name)
         if plate is not None:
             place(plate, homes.get(plate_name), fallback)
+
+        # Put the display settings back on the freshly built layers.
+        for layer, (alpha, depth, shown) in zip(camera.data.background_images,
+                                                layer_prefs.get(cam_name, [])):
+            layer.alpha = alpha
+            layer.display_depth = depth
+            if hasattr(layer, "show_background_image"):
+                layer.show_background_image = shown
 
         # Resolution and pixel aspect belong to the SCENE, and each camera can frame differently.
         scene = scene_of.get(cam_name)
