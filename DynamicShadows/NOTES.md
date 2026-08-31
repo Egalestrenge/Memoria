@@ -1,6 +1,7 @@
 # Dynamic Shadows — 3D scenery in Final Fantasy IX on top of Memoria
 
-Handover document. It describes the goal, what is built and verified, the workflow, and the traps
+Detailed handover document (see [README.md](../README.md) for installation and the map workflow).
+It describes the goal, what is built and verified, the workflow, and the traps
 that have already cost us time. Everything claimed here as "verified" was checked with numbers
 during development, not by eye.
 
@@ -19,7 +20,7 @@ Assembly-CSharp/Memoria/Field/     the 3D pass code (what gets compiled into the
   FieldSceneExport.cs              dumping a map for Blender (EXPORTSCENE)
 
 DynamicShadows/                    everything that is not engine code
-  README.md                        this document
+  NOTES.md                         this document
   Mod/DynamicShadows/              the mod exactly as it gets installed
   Unity/DynamicShadows/            Unity 5.2.3f1 project where the scenes are lit
   Tools/                           build, Blender generators and utilities
