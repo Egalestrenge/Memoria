@@ -10,6 +10,7 @@
 *.mat       binary
 *.blend     binary
 *.png       binary
+*.jpg       binary
 *.tga       binary
 
 # The PowerShell and Python scripts, and the .txt configuration the game reads,

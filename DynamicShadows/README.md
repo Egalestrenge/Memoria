@@ -7,6 +7,11 @@ of them: the character receives the scene's light, casts a genuine shadow onto t
 when walking into shade, takes on the tint of a nearby torch, and occludes correctly against pillars
 and walls.
 
+![Steiner casting a real shadow in the Alexandria Castle guard room](images/map150-guard-room.jpg)
+
+*Map 150, `Cast. Alex./Guard`. The background is the game's own prerendered plate, untouched — the
+shadow, and the way the light falls off across the floor, come from the 3D pass.*
+
 This is a **fork of [Albeoris/Memoria](https://github.com/Albeoris/Memoria)**, branch
 `dynamic-shadows`. Memoria's own README lives
 [upstream](https://github.com/Albeoris/Memoria/blob/main/README.md).
