@@ -1,702 +1,716 @@
-# Dynamic Shadows — escenarios 3D en Final Fantasy IX sobre Memoria
+# Dynamic Shadows — 3D scenery in Final Fantasy IX on top of Memoria
 
-Documento de traspaso. Describe el objetivo, lo que está construido y verificado, el flujo de
-trabajo, y las trampas que ya nos han costado tiempo. Todo lo que aquí se afirma como "verificado"
-se comprobó con números durante el desarrollo, no a ojo.
+Handover document. It describes the goal, what is built and verified, the workflow, and the traps
+that have already cost us time. Everything claimed here as "verified" was checked with numbers
+during development, not by eye.
 
 ---
 
-## 0. Cómo está organizado el repo
+## 0. How the repo is laid out
 
-Este repo **es** el fork de Memoria: el pase 3D no puede ser un mod normal, porque el sistema de
-mods de Memoria carga datos y no código. Así que el motor y el contenido van juntos, pero
-separados en el árbol:
+This repo **is** the Memoria fork: the 3D pass cannot be a normal mod, because Memoria's mod system
+loads data and not code. So the engine and the content live together, but kept apart in the tree:
 
 ```
-Assembly-CSharp/Memoria/Field/     el código del pase 3D (lo que se compila en el DLL)
-  CustomFieldObjects.cs            configuración por mapa, spawn de objetos, diagnóstico
-  FieldPerspectiveCamera.cs        cámara derivada de BGCAM_DEF, sombras, proxy del personaje
-  FieldSceneBundle.cs              carga del bundle de Unity de cada mapa
-  FieldSceneExport.cs              volcado de un mapa para Blender (EXPORTSCENE)
+Assembly-CSharp/Memoria/Field/     the 3D pass code (what gets compiled into the DLL)
+  CustomFieldObjects.cs            per-map configuration, object spawning, diagnostics
+  FieldPerspectiveCamera.cs        camera derived from BGCAM_DEF, shadows, player proxy
+  FieldSceneBundle.cs              loading each map's Unity bundle
+  FieldSceneExport.cs              dumping a map for Blender (EXPORTSCENE)
 
-DynamicShadows/                    todo lo que no es código del motor
-  README.md                        este documento
-  Mod/DynamicShadows/              el mod tal y como se instala en el juego
-  Unity/DynamicShadows/            proyecto de Unity 5.2.3f1 donde se iluminan las escenas
-  Tools/                           build, generadores de Blender y utilidades
+DynamicShadows/                    everything that is not engine code
+  README.md                        this document
+  Mod/DynamicShadows/              the mod exactly as it gets installed
+  Unity/DynamicShadows/            Unity 5.2.3f1 project where the scenes are lit
+  Tools/                           build, Blender generators and utilities
 ```
 
-Aparte de esos cuatro ficheros, el fork solo toca **9 líneas** de Memoria: cinco *hooks* en
-`Global/Honolulu/HonoluluFieldMain.cs` y cuatro `<Compile Include>` en el `.csproj`. Mantenerlo
-así de pequeño es deliberado: es lo que permite rebasar sobre `upstream/main` sin dolor.
+Apart from those four files, the fork touches only **9 lines** of Memoria: five hooks in
+`Global/Honolulu/HonoluluFieldMain.cs` and four `<Compile Include>` entries in the `.csproj`.
+Keeping it this small is deliberate: it is what allows rebasing onto `upstream/main` painlessly.
 
-### Instalar
+### Installing
 
-1. `.\DynamicShadows\Tools\build-and-deploy.ps1` (PowerShell **como administrador**: el juego
-   está en Program Files). Compila el DLL, lo copia a `x64\FF9_Data\Managed\` y despliega
-   `Mod/DynamicShadows/` en la raíz del juego.
-2. Activar **Dynamic Shadows** en el Mod Manager del launcher, o añadirlo a mano en
-   `Memoria.ini`, sección `[Mod]`, `FolderNames`. El script avisa si falta.
+1. `.\DynamicShadows\Tools\build-and-deploy.ps1` (PowerShell **as administrator**: the game lives
+   in Program Files). It builds the DLL, copies it into `x64\FF9_Data\Managed\` and deploys
+   `Mod/DynamicShadows/` into the game root.
+2. Enable **Dynamic Shadows** in the launcher's Mod Manager, or add it by hand to `Memoria.ini`,
+   section `[Mod]`, `FolderNames`. The script warns when it is missing.
 
-El mod trae su propio `MemoriaFieldObjects.txt`. Una copia en la raíz del juego tiene prioridad
-sobre la del mod y se relee al cargar cada mapa: es la vía para ajustar posiciones, luces y
-`CHARLIGHT` en caliente sin redesplegar. `-EditConfig` la deja puesta.
+The mod ships its own `MemoriaFieldObjects.txt`. A copy in the game root takes priority over the
+mod's and is re-read on every map load: that is the route for tuning positions, lights and
+`CHARLIGHT` live without redeploying. `-EditConfig` puts one there.
 
-> **Lo que impide distribuirlo como un mod normal.** El Mod Manager instala carpetas de datos;
-> no carga ensamblados. El pase 3D vive en `Assembly-CSharp.dll`, así que un release tiene que
-> traer el DLL y es incompatible con cualquier otro mod que también lo reemplace. La salida
-> limpia es que el código acabe *dentro* de Memoria vía PR upstream: entonces este mod pasa a ser
-> solo datos y deja de tener ese conflicto.
-
----
-
-## 1. Objetivo
-
-Sustituir los fondos prerenderizados de FFIX por escenarios 3D reales, modelados en Blender e
-iluminados en Unity, con el personaje integrado: iluminado por las mismas luces, proyectando sombra
-sobre la geometría y ocluyéndose correctamente con ella.
-
-El mapa de pruebas es **150 — `Cast. Alex./Guardia`** (cuartel de la guardia del Castillo de
-Alexandria), pequeño y con un save de Steiner disponible.
+> **What stops it being distributed as a normal mod.** The Mod Manager installs data folders; it
+> does not load assemblies. The 3D pass lives in `Assembly-CSharp.dll`, so a release has to ship the
+> DLL and is incompatible with any other mod that also replaces it. The clean way out is for the
+> code to end up *inside* Memoria via an upstream PR: this mod would then become data only and stop
+> having that conflict.
 
 ---
 
-## 2. Entorno
+## 1. Goal
 
-| Pieza        | Detalle                                                                        |
+Replace FFIX's prerendered backgrounds with real 3D scenery, modelled in Blender and lit in Unity,
+with the character integrated into it: lit by the same lights, casting a shadow onto the geometry
+and occluding correctly against it.
+
+The test map is **150 — `Cast. Alex./Guard`** (the Alexandria Castle guard barracks), small and with
+a Steiner save available.
+
+---
+
+## 2. Environment
+
+| Piece        | Detail                                                                         |
 | ------------ | ------------------------------------------------------------------------------ |
-| Juego        | FF9 de Steam, `C:\Program Files (x86)\Steam\steamapps\common\FINAL FANTASY IX` |
-| Motor        | **Unity 5.2.3f1** (según `FileVersion` de `x64\FF9.exe`)                       |
-| Memoria      | este repo: fork de `Albeoris/Memoria`, rama `dynamic-shadows`                   |
-| Unity Editor | 5.2.3f1, proyecto en `DynamicShadows/Unity/DynamicShadows/`                    |
-| Blender      | 5.1 en `C:\Program Files\Blender Foundation\Blender 5.1`                       |
+| Game         | FF9 from Steam, `C:\Program Files (x86)\Steam\steamapps\common\FINAL FANTASY IX` |
+| Engine       | **Unity 5.2.3f1** (per the `FileVersion` of `x64\FF9.exe`)                     |
+| Memoria      | this repo: a fork of `Albeoris/Memoria`, branch `dynamic-shadows`              |
+| Unity Editor | 5.2.3f1, project in `DynamicShadows/Unity/DynamicShadows/`                     |
+| Blender      | 5.1 at `C:\Program Files\Blender Foundation\Blender 5.1`                       |
 
-### Compilación
+### Building
 
-Memoria **no es un plugin**: es el propio `Assembly-CSharp.dll` del juego reescrito. No hay Harmony
-ni BepInEx en el repo; los métodos se editan directamente en el fuente decompilado.
+Memoria **is not a plugin**: it is the game's own `Assembly-CSharp.dll`, rewritten. There is no
+Harmony and no BepInEx in the repo; methods are edited directly in the decompiled source.
 
 ```powershell
-.\DynamicShadows\Tools\build-and-deploy.ps1              # compila y despliega
-.\DynamicShadows\Tools\build-and-deploy.ps1 -EditConfig  # además saca la config a la raíz
-.\DynamicShadows\Tools\build-and-deploy.ps1 -SkipBuild   # solo despliega el mod
+.\DynamicShadows\Tools\build-and-deploy.ps1              # build and deploy
+.\DynamicShadows\Tools\build-and-deploy.ps1 -EditConfig  # also drop the config in the game root
+.\DynamicShadows\Tools\build-and-deploy.ps1 -SkipBuild   # deploy the mod only
 ```
 
-Dos particularidades del entorno, ya resueltas dentro del script:
+Two environment quirks, already handled inside the script:
 
-- Se usa el **MSBuild de VS 2022 Build Tools**, no el de VS 2026: los proyectos C++
-  (`SaXAudio`, `Memoria.Injection`) piden el toolset `v143`, y VS 2026 solo trae `v145`.
-- Hace falta `-p:FrameworkPathOverride=<repo>\References\` porque
-  `Memoria.XInputDotNetPure.csproj` es el único proyecto v3.5 sin esa propiedad, y no hay
-  targeting pack de .NET 3.5 instalado.
+- It uses **MSBuild from VS 2022 Build Tools**, not the VS 2026 one: the C++ projects (`SaXAudio`,
+  `Memoria.Injection`) ask for toolset `v143`, and VS 2026 only ships `v145`.
+- `-p:FrameworkPathOverride=<repo>\References\` is needed because
+  `Memoria.XInputDotNetPure.csproj` is the only v3.5 project without that property, and there is no
+  .NET 3.5 targeting pack installed.
 
 ---
 
-## 3. Los tres sistemas de coordenadas
+## 3. The three coordinate systems
 
-Esto es el corazón de todo. **Manda el juego**; Blender y Unity son vistas suyas.
+This is the heart of everything. **The game is authoritative**; Blender and Unity are views of it.
 
-### Espacio de campo (autoritativo)
+### Field space (authoritative)
 
-Unidades internas de FFIX. **+Y es arriba** (lo confirma `FieldMap.charAimHeight`, que se _suma_
-para elevar el punto de mira de la cámara, y `PSX.CalculateGTE_RTPT`, que niega la Y precisamente
-para convertir a la convención Y-abajo de PSX).
+FFIX's internal units. **+Y is up** (confirmed by `FieldMap.charAimHeight`, which is _added_ to
+raise the camera's aim point, and by `PSX.CalculateGTE_RTPT`, which negates Y precisely in order to
+convert to the PSX Y-down convention).
 
-**Escala: 345 unidades de campo por metro.** No es una estimación: sale de
-`FF9BattleDBHeightAndRadius`, que da la altura de cada modelo. Steiner (`GEO_MAIN_F0_STN`, GEO id 5489) mide **603 unidades**:
+**Scale: 345 field units per metre.** This is not an estimate: it comes from
+`FF9BattleDBHeightAndRadius`, which gives each model's height. Steiner (`GEO_MAIN_F0_STN`, GEO id
+5489) is **603 units** tall:
 
 ```
-factor = 603 / altura_en_metros    ->    603 / 1.75 = 345
+factor = 603 / height_in_metres    ->    603 / 1.75 = 345
 ```
 
-### La base de la cámara lleva escala
+### The camera basis carries scale
 
-`BGCAM_DEF` no guarda una rotación pura. La base que exporta `field.json` es ortogonal pero **no
-ortonormal**: `|right| ≈ 1`, `|forward| ≈ 1`, pero **`|up| = 1.0713 = 15/14`**, el estiramiento de
-320×224 a 4:3 de PSX. Cualquier cosa que reconstruya esta cámara tiene que descomponerla en
-rotación × escala y llevar la escala al campo de visión, **y usar la inversa, no la traspuesta**.
-Ver §5.2.
+`BGCAM_DEF` does not store a pure rotation. The basis exported in `field.json` is orthogonal but
+**not orthonormal**: `|right| ≈ 1`, `|forward| ≈ 1`, but **`|up| = 1.0713 = 15/14`**, the PSX
+320×224 to 4:3 stretch. Anything reconstructing this camera has to decompose it into
+rotation × scale and move the scale into the field of view, **and use the inverse, not the
+transpose**. See §5.2.
 
-### Espacio de Blender
+### Blender space
 
-`campo → blender:  (-x, -z, y) / 345`
+`field → blender:  (-x, -z, y) / 345`
 
-La permutación Y↔Z es el cambio de quiralidad (campo es zurdo con Y arriba, Blender diestro con Z
-arriba). Las **negaciones de X y Z compensan una rotación de 180° sobre el eje vertical que
-introduce la cadena de exportación FBX**, medida con marcadores (§7).
+The Y↔Z permutation is the change of handedness (field is left-handed with Y up, Blender
+right-handed with Z up). The **X and Z negations compensate for a 180° rotation about the vertical
+axis introduced by the FBX export chain**, measured with markers (§7).
 
-### Espacio de Unity
+### Unity space
 
-Se modela en **metros**, y el runtime multiplica por `SCENESCALE` al cargar. Los objetos van bajo
-un contenedor `Field3D Scene` con esa escala.
+Modelling happens in **metres**, and the runtime multiplies by `SCENESCALE` on load. The objects go
+under a `Field3D Scene` container carrying that scale.
 
-> **Por qué métrico y no unidades de campo:** la escala de campo rompe todos los valores por
-> defecto de Unity que van "por unidad". El horneado de lightmaps con `Baked Resolution` = 40
-> téxeles/unidad sobre un plano de 1200 unidades pedía una textura de 48000×48000.
+> **Why metric and not field units:** field scale breaks every Unity default that works "per unit".
+> Baking lightmaps with `Baked Resolution` = 40 texels/unit over a 1200-unit plane asked for a
+> 48000×48000 texture.
 
 ---
 
-## 4. Arquitectura del render
+## 4. Render architecture
 
-FFIX **no dibuja los fields en 3D**. Su cámara de Unity es **ortográfica y esencialmente 2D**
-(`FieldMap.CenterCameraOnPlayer` solo la mueve en X/Y), y la perspectiva se falsifica en el vertex
-shader de cada material PSX mediante `_MatrixRT` y `_ViewDistance`, emulando el GTE de la PSX. El
-depth que se escribe no es distancia real, sino un índice de orden tipo OT.
+FFIX **does not draw fields in 3D**. Its Unity camera is **orthographic and essentially 2D**
+(`FieldMap.CenterCameraOnPlayer` only moves it in X/Y), and perspective is faked in the vertex
+shader of each PSX material through `_MatrixRT` and `_ViewDistance`, emulating the PSX GTE. The
+depth that gets written is not a real distance but an OT-style ordering index.
 
-Pero `BGCAM_DEF` **sí guarda una cámara 3D de verdad**: rotación 3×3, traslación y `proj`
-(distancia de proyección). De ahí se deriva una cámara en perspectiva real.
+But `BGCAM_DEF` **does store a real 3D camera**: a 3×3 rotation, a translation and `proj` (the
+projection distance). A true perspective camera is derived from that.
 
-### El pase 3D
+### The 3D pass
 
 ```
-FieldMap Camera (ortográfica, capa != 30)   ← el juego, tal cual
-Field3D Camera  (perspectiva derivada, solo capa 30, clearFlags=Depth, depth=+1)
-  └─ Field3D Root                (identidad, coordenadas de campo)
-     ├─ objetos LIT y proxy del jugador
-     └─ Field3D Scene            (escala SCENESCALE, contenido del bundle en metros)
+FieldMap Camera (orthographic, layer != 30)   <- the game, untouched
+Field3D Camera  (derived perspective, layer 30 only, clearFlags=Depth, depth=+1)
+  |__ Field3D Root               (identity, field coordinates)
+      |__ LIT objects and the player proxy
+      |__ Field3D Scene          (SCENESCALE scale, bundle content in metres)
 ```
 
-La cámara 3D se dibuja **después** del field, borrando solo el z-buffer. Su matriz de vista y su
-proyección salen de `FieldPerspectiveCamera.TryBuildMatrices`.
+The 3D camera is drawn **after** the field, clearing only the z-buffer. Its view and projection
+matrices come from `FieldPerspectiveCamera.TryBuildMatrices`.
 
-### Detalles que costaron encontrar
+### Details that took work to find
 
-**La escala en píxeles se mide, no se calcula.** El `aspect` y el `pixelRect` de la cámara del
-field cambian por mapa (el 150 está _pillarboxed_: `x=77.68, width=1764.64` sobre 1920). Calcularlo
-desde `FieldMap.HalfFieldWidth` daba un error horizontal creciente con la distancia al centro. Se
-resuelve muestreando tres puntos con `WorldToScreenPoint` — una proyección ortográfica es afín, así
-que tres muestras la determinan exactamente.
+**The pixel scale is measured, not computed.** The field camera's `aspect` and `pixelRect` change
+per map (150 is _pillarboxed_: `x=77.68, width=1764.64` out of 1920). Computing it from
+`FieldMap.HalfFieldWidth` gave a horizontal error that grew with distance from the centre. It is
+solved by sampling three points with `WorldToScreenPoint` — an orthographic projection is affine, so
+three samples determine it exactly.
 
-**El desplazamiento de encuadre es un _lens shift_, no un movimiento de cámara.** Va en `P02`/`P12`
-de la matriz de proyección. Mover la cámara cambiaría la perspectiva; el juego solo desplaza el
-recorte.
+**The frame offset is a _lens shift_, not a camera movement.** It goes in `P02`/`P12` of the
+projection matrix. Moving the camera would change the perspective; the game only shifts the crop.
 
-**El determinante −1 de la matriz de vista es correcto.** `worldToCameraMatrix == Scale(1,1,-1) *
-transform.worldToLocalMatrix`, así que siempre es negativo. Forzarlo a +1 espejando el mundo hace
-la matriz irrepresentable como transform, y `Quaternion.LookRotation` reconstruye el eje _right_ al
-revés en silencio — lo que invierte el movimiento izquierda/derecha dejando los objetos estáticos
-con aspecto correcto.
+**The −1 determinant of the view matrix is correct.** `worldToCameraMatrix == Scale(1,1,-1) *
+transform.worldToLocalMatrix`, so it is always negative. Forcing it to +1 by mirroring the world
+makes the matrix unrepresentable as a transform, and `Quaternion.LookRotation` silently rebuilds the
+_right_ axis backwards — which inverts left/right movement while leaving static objects looking
+correct.
 
-**Unity culla con el `transform` de la cámara, no con `worldToCameraMatrix`.** Asignar solo la
-matriz deja la cámara en el origen y se descarta todo antes de dibujarlo.
+**Unity culls using the camera's `transform`, not `worldToCameraMatrix`.** Assigning only the matrix
+leaves the camera at the origin and everything is discarded before being drawn.
 
-### El personaje
+### The character
 
-`FieldPerspectiveCamera.SyncPlayerProxy` toma cada frame una instantánea de las mallas deformadas
-con `SkinnedMeshRenderer.BakeMesh` y la copia a `MeshRenderer` en la capa 30. Modos:
+`FieldPerspectiveCamera.SyncPlayerProxy` takes a snapshot of the deformed meshes every frame with
+`SkinnedMeshRenderer.BakeMesh` and copies it into a `MeshRenderer` on layer 30. Modes:
 
-| Modo     | Efecto                                                                                                       |
-| -------- | ------------------------------------------------------------------------------------------------------------ |
-| `off`    | nada                                                                                                         |
-| `shadow` | invisible en el pase 3D pero presente en el shadow map: se sigue viendo el render PSX y proyecta sombra real |
-| `full`   | además se dibuja con `Standard`, encima del PSX (útil para comparar)                                         |
-| `only`   | apaga los renderers PSX del personaje: comparte z-buffer real con la geometría 3D                            |
+| Mode     | Effect                                                                                                        |
+| -------- | ------------------------------------------------------------------------------------------------------------- |
+| `off`    | nothing                                                                                                       |
+| `shadow` | invisible in the 3D pass but present in the shadow map: the PSX render is still what you see, and it casts a real shadow |
+| `full`   | also drawn with `Standard`, on top of the PSX one (useful for comparison)                                     |
+| `only`   | turns off the character's PSX renderers: shares a real z-buffer with the 3D geometry                          |
 
-`BakeMesh` **ya aplica la escala del renderer**, así que el proxy va con `localScale = one`. Copiar
-el `lossyScale` del jugador `(-1,-1,1)` lo espejaba y lo hundía bajo el suelo.
+`BakeMesh` **already applies the renderer's scale**, so the proxy runs with `localScale = one`.
+Copying the player's `lossyScale` of `(-1,-1,1)` mirrored it and sank it below the floor.
 
 ---
 
-## 5. Flujo de trabajo
+## 5. Workflow
 
-### 5.1 Exportar un mapa
+### 5.1 Exporting a map
 
-Con `EXPORTSCENE` en `MemoriaFieldObjects.txt`, entrar al mapa genera
-`<juego>/MemoriaSceneExport/<mapa>/`:
+With `EXPORTSCENE` in `MemoriaFieldObjects.txt`, entering the map generates
+`<game>/MemoriaSceneExport/<map>/`:
 
-| Archivo          | Contenido                                                                      |
+| File             | Contents                                                                       |
 | ---------------- | ------------------------------------------------------------------------------ |
-| `field.json`     | cámara (posición, base, FOV, lens shift), resolución, `sceneScale`             |
-| `background.png` | placa limpia del fondo, renderizada sin personajes                             |
-| `walkmesh.obj`   | malla de colisión en unidades de campo, con `floorIdx`/`triIdx` en comentarios |
+| `field.json`     | camera (position, basis, FOV, lens shift), resolution, `sceneScale`            |
+| `background.png` | clean background plate, rendered without characters                            |
+| `walkmesh.obj`   | collision mesh in field units, with `floorIdx`/`triIdx` in comments            |
 
-Se exporta **en runtime y no de los archivos** porque la cámara solo queda determinada al jugar: el
-encuadre depende de la resolución y del ajuste por mapa.
+It is exported **at runtime and not from the files** because the camera is only determined while
+playing: the framing depends on the resolution and on the per-map adjustment.
 
-### 5.2 Generar el proyecto de Blender
+### 5.2 Generating the Blender project
 
 ```powershell
 & 'C:\Program Files\Blender Foundation\Blender 5.1\blender.exe' --background --factory-startup `
-  --python tools\blender\build_field_project.py -- `
+  --python DynamicShadows\Tools\blender\build_field_project.py -- `
   "C:\Program Files (x86)\Steam\steamapps\common\FINAL FANTASY IX\MemoriaSceneExport\150"
 ```
 
-Produce `field_<mapa>.blend` con la cámara colocada, el fondo como capas de la cámara, el walkmesh
-en wireframe, y tres marcadores de referencia. Todo en metros.
+It produces `field_<map>.blend` with the camera placed, the background as camera layers, the
+walkmesh in wireframe, and three reference markers. All in metres.
 
-**El script se verifica solo en cada ejecución**: proyecta los vértices del walkmesh con la cámara
-de Blender (`world_to_camera_view`) y los compara con la proyección del juego. Estado actual del
-mapa 150: **X 0.063 px, Y 0.037 px**. Si sube de un píxel lo dice en pantalla.
+**The script verifies itself on every run**: it projects the walkmesh vertices with the Blender
+camera (`world_to_camera_view`) and compares them against the game's projection. Current state on
+map 150: **X 0.063 px, Y 0.037 px**. If it goes above a pixel it says so on screen.
 
-#### Reconstruir la cámara: tres trampas
+#### Rebuilding the camera: three traps
 
-**1. La base exportada no es ortonormal.** `|up|` vale **1.0713**, que es `15/14`: el estiramiento
-del framebuffer de 320×224 de PSX mostrado en 4:3. FFIX lo lleva dentro de la propia matriz de
-cámara para que los modelos casen con los fondos, pintados para esa proporción. Una cámara de
-Blender es ortonormal por construcción, así que la escala se saca de la base y pasa a las
-tangentes del campo de visión:
+**1. The exported basis is not orthonormal.** `|up|` is **1.0713**, which is `15/14`: the stretch of
+the PSX 320×224 framebuffer shown at 4:3. FFIX carries it inside the camera matrix itself so that
+the models line up with the backgrounds, painted for that ratio. A Blender camera is orthonormal by
+construction, so the scale is taken out of the basis and moved into the field-of-view tangents:
 
 ```
 tan_x = tan(fovX/2) · |right| / |forward|
 tan_y = tan(fovY/2) · |up|    / |forward|
 ```
 
-Meter la escala como columnas de `matrix_world` **no** funciona: Blender proyecta con la inversa
-de verdad, así que la aplica al revés.
+Putting the scale into the columns of `matrix_world` does **not** work: Blender projects with the
+true inverse, so it applies it the wrong way round.
 
-**2. El factor es `k/kz`, no `kz/k`.** El juego proyecta con la **inversa** de esa base, y para
-columnas ortogonales de norma `k` la inversa es la traspuesta dividida por `k²` — no la traspuesta
-a secas. Confundirlas invierte el factor. El error es difícil de ver porque si el script de
-comprobación comete el mismo, los dos lados cuadran estando mal. Lo que lo desempata es una
-magnitud independiente: el `pixel aspect` que sale con la inversa es **0.93359**, y
-`(4/3)/(320/224) = 0.93333` es el de PSX. Con la traspuesta sale su recíproco.
+**2. The factor is `k/kz`, not `kz/k`.** The game projects with the **inverse** of that basis, and
+for orthogonal columns of norm `k` the inverse is the transpose divided by `k²` — not the bare
+transpose. Confusing them inverts the factor. The error is hard to see, because if the checking
+script makes the same mistake both sides agree while being wrong. What breaks the tie is an
+independent quantity: the `pixel aspect` that comes out with the inverse is **0.93359**, and
+`(4/3)/(320/224) = 0.93333` is the PSX one. With the transpose you get its reciprocal.
 
-**3. El aspecto angular no es el de píxeles.** 1.5257 contra 1.6343. La diferencia se declara como
-pixel aspect, y Blender **solo lo expresa en el eje que queda ≥ 1**: poner el otro por debajo de 1
-no hace absolutamente nada. Aquí toca `pixel_aspect_y = 1.07113`, `pixel_aspect_x = 1.0`.
+**3. The angular aspect is not the pixel aspect.** 1.5257 against 1.6343. The difference is declared
+as pixel aspect, and Blender **only expresses it on the axis that ends up ≥ 1**: setting the other
+one below 1 does absolutely nothing. Here it lands on `pixel_aspect_y = 1.07113`,
+`pixel_aspect_x = 1.0`.
 
-Y el lens shift va **con el signo contrario** al desplazamiento de encuadre del juego. Medido, no
-supuesto: `d(u)/d(shift_x) = −1` y `d(v)/d(shift_y) = −aspecto_angular`.
+And the lens shift goes **with the opposite sign** to the game's frame offset. Measured, not
+assumed: `d(u)/d(shift_x) = −1` and `d(v)/d(shift_y) = −angular_aspect`.
 
 ```
 shift_x = −ndcOffsetX / 2
-shift_y = −ndcOffsetY / 2 / aspecto_angular
+shift_y = −ndcOffsetY / 2 / angular_aspect
 ```
 
-#### El fondo
+#### The background
 
-El fondo **no es geometría**: son **dos capas de la cámara** (`background_images`), en Object Data
-Properties > Background Images. Al no ser un objeto de la escena, nada de lo que modeles las tapa
-ni las mueve, y no hay un plano gigante estorbando en mitad de la sala.
+The background is **not geometry**: it is **two camera layers** (`background_images`), under Object
+Data Properties > Background Images. Not being a scene object, nothing you model covers or moves
+them, and there is no giant plate in the way in the middle of the room.
 
-Cada capa se configura igual:
+Each layer is configured the same way:
 
-- `frame_method = STRETCH`, no `FIT`: la imagen y el encuadre ya tienen la misma proporción, y así
-  ningún redondeo mete bandas por los lados.
-- **offset (0, 0)**: el encuadre de la cámara ya lleva el lens shift, así que la imagen coincide
-  con el render sin corregir nada.
-- `scale = backgroundScale`: el exportador captura el fondo **entero**, no solo lo que cabe en
-  pantalla. Un fondo de field es mayor que la ventana y el juego hace scroll moviendo su cámara
-  ortográfica. La imagen crece por igual en los dos ejes y centrada en el encuadre, que es justo
-  lo que permite colocarla con **una sola escala uniforme y sin desplazamiento**.
+- `frame_method = STRETCH`, not `FIT`: the image and the frame already share the same ratio, so no
+  rounding introduces bands at the sides.
+- **offset (0, 0)**: the camera frame already carries the lens shift, so the image matches the
+  render with nothing to correct.
+- `scale = backgroundScale`: the exporter captures the **whole** background, not only what fits on
+  screen. A field background is larger than the window and the game scrolls by moving its
+  orthographic camera. The image grows equally on both axes and centred on the frame, which is
+  exactly what allows placing it with **a single uniform scale and no offset**.
 
-| Capa                | Estado      | Uso                                                                                |
-| ------------------- | ----------- | ---------------------------------------------------------------------------------- |
-| `Back`, alpha 1.0   | activa      | se ve donde aún no hay nada modelado                                               |
-| `Front`, alpha 0.35 | desactivada | actívala y la referencia se dibuja **por encima** del modelo, para alinear aristas |
+| Layer               | State    | Use                                                                       |
+| ------------------- | -------- | ------------------------------------------------------------------------- |
+| `Back`, alpha 1.0   | enabled  | visible wherever nothing has been modelled yet                            |
+| `Front`, alpha 0.35 | disabled | enable it and the reference draws **over** the model, for aligning edges  |
 
-> Hubo un intento anterior con planos texturizados —el fondo como geometría, encuadrado invirtiendo
-> la proyección— y con offset calculado en las capas. Las dos cosas eran un parche sobre el
-> síntoma: el desfase no venía de la imagen, sino de la cámara, que tenía el shift con el signo
-> cambiado y un 6.6% de escala en Y. Arreglada la cámara, sobra el offset y sobra el plano.
+> There was an earlier attempt with textured plates —the background as geometry, framed by
+> inverting the projection— and with a computed offset on the layers. Both were patches on the
+> symptom: the misalignment did not come from the image but from the camera, which had the shift
+> sign flipped and a 6.6% scale on Y. With the camera fixed, the offset is unnecessary and so is the
+> plate.
 
-### 5.2b Sombras sobre el fondo sin modelar el escenario
+### 5.2b Shadows over the background without modelling the scenery
 
-Alternativa de mucho menos trabajo, y el camino recomendado para empezar: en vez de sustituir el
-fondo, se modela **geometría muy simple** (suelo, paredes, una columna) que **no se dibuja** y solo
-sirve para recibir la sombra del personaje y para dar profundidad real.
+A far cheaper alternative, and the recommended way to start: instead of replacing the background,
+you model **very simple geometry** (floor, walls, a column) that **is not drawn** and only serves to
+receive the character's shadow and to give real depth.
 
-Dos shaders en [DynamicShadows/Unity/DynamicShadows/Assets/Shaders/](DynamicShadows/Unity/DynamicShadows/Assets/Shaders/):
+Two shaders in [DynamicShadows/Unity/DynamicShadows/Assets/Shaders/](DynamicShadows/Unity/DynamicShadows/Assets/Shaders/):
 
-**`Memoria/ShadowCatcher`** — la geometría proxy. La cámara 3D solo limpia el z-buffer, así que al
-dibujarse el framebuffer ya contiene la placa prerenderizada. El pase de color usa
-`Blend DstColor Zero` y saca `lerp(colorSombra, blanco, atenuación)`: donde no hay sombra multiplica
-por **1**, y el fondo queda idéntico bit a bit, sin proyectar texturas ni casar espacios de color.
-Un primer pase `ColorMask 0` en cola `Geometry-1` escribe la profundidad **antes** que el personaje,
-que es lo que le da oclusión de verdad. No lleva `Fallback`, a propósito: la geometría no proyecta
-sombra, porque las del escenario ya están pintadas en el fondo y volverlas a proyectar las
-duplicaría.
+**`Memoria/ShadowCatcher`** — the proxy geometry. The 3D camera only clears the z-buffer, so by the
+time it is drawn the framebuffer already holds the prerendered plate. The colour pass uses
+`Blend DstColor Zero` and outputs `lerp(shadowColour, white, attenuation)`: where there is no shadow
+it multiplies by **1**, and the background is left identical bit for bit, without projecting
+textures or matching colour spaces. A first `ColorMask 0` pass in queue `Geometry-1` writes depth
+**before** the character, which is what gives real occlusion. It carries no `Fallback`, on purpose:
+the geometry does not cast a shadow, because the scenery's shadows are already painted into the
+background and casting them again would double them.
 
-**`Memoria/FieldActorLit`** — el personaje. Reproduce la aritmética de `PSX/FieldMapActor`, leída de
-su ensamblador d3d9 en `StreamingAssets/Shaders/PSX/FieldMapActor.txt`:
+**`Memoria/FieldActorLit`** — the character. It reproduces the arithmetic of `PSX/FieldMapActor`,
+read off its d3d9 assembly in `StreamingAssets/Shaders/PSX/FieldMapActor.txt`:
 
 ```
 mad r3, r0.w, v0.w, c1.x    ; texA * colorA - 0.5
 texkill r3                  ;   -> clip(c.a - 0.5)
-mul_pp r0, r0, v0           ; c = tex * (colorVertice * _Color)
+mul_pp r0, r0, v0           ; c = tex * (vertexColour * _Color)
 mul_pp r1.xyz, r0.w, r0
-add_pp r0.xyz, r1, r1       ; rgb = 2 * c.a * c.rgb     (modulate2x premultiplicado)
+add_pp r0.xyz, r1, r1       ; rgb = 2 * c.a * c.rgb     (premultiplied modulate2x)
 ```
 
-con `Blend One OneMinusSrcAlpha`. Con `_LightInfluence = 0` la salida es **idéntica** a la del
-juego; subiéndolo entra la direccional, la ambiental y las luces puntuales del pase `ForwardAdd`.
-Su pase `ShadowCaster` repite el recorte alfa: sin él, el pelo y las capas —que son quads con
-textura calada— proyectarían rectángulos.
+with `Blend One OneMinusSrcAlpha`. With `_LightInfluence = 0` the output is **identical** to the
+game's; raising it brings in the directional, the ambient and the point lights of the `ForwardAdd`
+pass. Its `ShadowCaster` pass repeats the alpha cutout: without it, hair and capes —which are quads
+with a cut-out texture— would cast rectangles.
 
-Un shader **no se puede compilar en runtime** (los 140 subprogramas del juego son ensamblador d3d9
-precompilado), así que ambos viajan dentro del bundle, compilados por el editor 5.2.3. El material
-del personaje se recoge en [FieldSceneBundle.cs](Assembly-CSharp/Memoria/Field/FieldSceneBundle.cs)
-`Adopt`, buscando cualquier material cuyo shader se llame `Memoria/FieldActorLit`.
+A shader **cannot be compiled at runtime** (the game's 140 subprograms are precompiled d3d9
+assembly), so both travel inside the bundle, compiled by the 5.2.3 editor. The character material is
+picked up in [FieldSceneBundle.cs](Assembly-CSharp/Memoria/Field/FieldSceneBundle.cs) `Adopt`, by
+looking for any material whose shader is named `Memoria/FieldActorLit`.
 
-El objeto que lo lleve tiene que quedarse **activo con el Mesh Renderer desmarcado**, no al revés:
-el contenido de la escena se localiza recorriendo los objetos raíz con `FindObjectsOfType`, que
-**no devuelve objetos desactivados**, así que un portador desactivado en la raíz no se encontraría
-nunca. Con el renderer desmarcado no dibuja nada y sí se encuentra. De esto se encarga
+The object carrying it has to be left **active with the Mesh Renderer unchecked**, not the other way
+round: the scene content is located by walking the root objects with `FindObjectsOfType`, which
+**does not return disabled objects**, so a disabled carrier at the root would never be found. With
+the renderer unchecked it draws nothing and is still found. This is handled by
 [SetupDynamicShadowsScene.cs](DynamicShadows/Unity/DynamicShadows/Assets/Editor/SetupDynamicShadowsScene.cs).
-Si algún shader no sobrevive al empaquetado se avisa en el log en vez de dibujar rosa en silencio.
+If a shader does not survive packaging it is reported in the log rather than silently drawing pink.
 
-Orden de trabajo, cada hito comprobable por sí solo:
+Order of work, each milestone checkable on its own:
 
-| Hito | Config                                                     | Qué tiene que verse                                                          |
-| ---- | ---------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| 1    | `PLAYER3D shadow` + bundle con suelo catcher y direccional | el juego intacto y **una sombra** del personaje en el suelo                  |
-| 2    | añadir paredes y columnas al catcher                       | la sombra sube por la pared                                                  |
-| 3    | `PLAYER3D only` + `CHARLIGHT 0`                            | **nada** cambia de aspecto en el personaje, y ya se ocluye tras las columnas |
-| 4    | subir `CHARLIGHT` a 0.2–0.4                                | se oscurece al entrar en sombra                                              |
-| 5    | luces puntuales en la escena                               | se tiñe al acercarse a una antorcha                                          |
+| Milestone | Config                                                      | What has to be visible                                                    |
+| --------- | ----------------------------------------------------------- | ------------------------------------------------------------------------- |
+| 1         | `PLAYER3D shadow` + bundle with a catcher floor and directional | the game intact and **one shadow** of the character on the floor      |
+| 2         | add walls and columns to the catcher                        | the shadow climbs the wall                                                |
+| 3         | `PLAYER3D only` + `CHARLIGHT 0`                             | **nothing** about the character changes, and it now occludes behind columns |
+| 4         | raise `CHARLIGHT` to 0.2–0.4                                | it darkens on entering shadow                                             |
+| 5         | point lights in the scene                                   | it takes on a tint when approaching a torch                               |
 
-El hito 3 es el que hay que mirar con lupa: es el único momento en que el personaje deja de
-dibujarlo el juego. Si con `CHARLIGHT 0` se nota **cualquier** diferencia, la fórmula de color no
-está bien reproducida y hay que arreglarla antes de seguir.
+Milestone 3 is the one to study closely: it is the only moment the character stops being drawn by
+the game. If with `CHARLIGHT 0` **any** difference shows, the colour formula is not correctly
+reproduced and it has to be fixed before going on.
 
-### 5.2c Lo que costó encontrar
+### 5.2c What took work to find
 
-Todos con el mismo patrón: **una comprobación que parecía verificar y no verificaba**. Van aquí
-porque cada uno se puede volver a cometer.
+All of them share one pattern: **a check that looked like it was verifying and was not**. They are
+listed here because every one of them can be made again.
 
-**La matriz de `BGCAM_DEF` no es una rotación.** Sus filas llevan escala, y la de Y es `14/15`: el
-framebuffer de 320×224 de PSX mostrado en 4:3, que FFIX guarda ahí para que los modelos casen con
-el fondo pintado. Una cámara de Unity no puede llevarla — `Quaternion.LookRotation` ortonormaliza
-en silencio lo que se le dé — así que hay que **sacarla de la vista y meterla en la proyección**:
-`P00' = P00·kx/kz`, `P11' = P11·ky/kz`, `P23' = P23/kz`. El mismo error se cometió dos veces, una en
-la cámara de Blender y otra en la del juego, con meses de distancia conceptual entre ellas.
+**The `BGCAM_DEF` matrix is not a rotation.** Its rows carry scale, and the Y one is `14/15`: the
+PSX 320×224 framebuffer shown at 4:3, which FFIX stores there so the models line up with the painted
+background. A Unity camera cannot carry it — `Quaternion.LookRotation` silently orthonormalises
+whatever it is given — so it has to be **taken out of the view and put into the projection**:
+`P00' = P00·kx/kz`, `P11' = P11·ky/kz`, `P23' = P23/kz`. The same mistake was made twice, once on the
+Blender camera and once on the game's, months apart conceptually.
 
-> Y el diagnóstico decía `delta=(0.0,0.0)`. Comparaba la proyección derivada contra
-> `PSX.CalculateGTE_RTPT`: **dos cálculos en C#, ninguno pasando por la cámara real**. Verificaba
-> las matrices entre sí, no lo que Unity hace con ellas. Lo destapó dibujar la máscara en verde por
-> encima del render del juego, que es la primera medición que sí atraviesa la cámara.
+> And the diagnostics said `delta=(0.0,0.0)`. It compared the derived projection against
+> `PSX.CalculateGTE_RTPT`: **two calculations in C#, neither going through the real camera**. It
+> verified the matrices against each other, not what Unity does with them. What exposed it was
+> painting the mask in green over the game's render, the first measurement that actually goes
+> through the camera.
 
-**Unity no escala el `range` de una luz con la transformada.** El contenedor multiplica por
-`SCENESCALE` para pasar de metros a unidades de campo, pero el alcance de la luz no se entera: una
-antorcha de 3 m acaba alcanzando 3 unidades, o sea 9 milímetros. Se convierte al adoptar la escena.
+**Unity does not scale a light's `range` with the transform.** The container multiplies by
+`SCENESCALE` to go from metres to field units, but the light's range never finds out: a 3 m torch
+ends up reaching 3 units, i.e. 9 millimetres. It is converted when the scene is adopted.
 
-**Quitar el pase `ShadowCaster` a un shader le impide RECIBIR sombra.** La sombra direccional en
-forward es en espacio de pantalla y se resuelve leyendo `_CameraDepthTexture`, que Unity construye
-con el pase ShadowCaster de cada objeto. Sin él, el catcher no entra en la textura de profundidad y
-su píxel consulta la sombra a la profundidad del fondo: iluminado siempre. Para que **no proyecte**,
-el sitio es el desplegable _Cast Shadows_ del MeshRenderer, no quitar el pase.
+**Removing the `ShadowCaster` pass from a shader stops it RECEIVING shadow.** Directional shadows in
+forward rendering are screen-space and are resolved by reading `_CameraDepthTexture`, which Unity
+builds from each object's ShadowCaster pass. Without it the catcher never enters the depth texture
+and its pixel queries the shadow at the background's depth: always lit. To stop it **casting**, the
+place is the _Cast Shadows_ dropdown on the MeshRenderer, not removing the pass.
 
-**El descarte por stencil fue peor que el problema que arreglaba.** Recortaba sin mirar profundidad,
-así que mordía la sombra del propio personaje donde su silueta la tocaba. La máscara de profundidad
-basta y es correcta: descarta solo lo que está detrás. Si algo está de verdad delante, el juego está
-pintando el fondo ahí, no al personaje, y oscurecerlo es lo que toca.
+**Stencil discard was worse than the problem it fixed.** It cut without looking at depth, so it bit
+into the character's own shadow where their silhouette touched it. The depth mask is enough and is
+correct: it discards only what is behind. If something really is in front, the game is painting the
+background there, not the character, and darkening it is the right thing to do.
 
-**Modular los píxeles del personaje mezclando sobre el render del juego no puede funcionar.** El
-proxy multiplica lo que ENCUENTRE, y no sabe si el juego dibujó ahí al personaje o a un NPC que pasa
-por delante: con un moguri delante aparecía el fantasma oscuro de Steiner encima. La luz va por
-`_Color` del material del juego (ver `CHARLIGHT`).
+**Modulating the character's pixels by blending over the game's render cannot work.** The proxy
+multiplies whatever it FINDS, and does not know whether the game drew the character there or an NPC
+walking in front: with a moogle in the way, a dark ghost of Steiner appeared on top. Lighting goes
+through the game material's `_Color` instead (see `CHARLIGHT`).
 
-**`LateUpdate` no es lo bastante tarde.** El orden entre MonoBehaviours es indefinido, así que un
-actor cuya animación avanza el juego en su propio `LateUpdate` queda posado después del nuestro. Se
-ve solo en lo que se mueve rápido — el pompón de un moguri, no un Steiner parado. El horneado va en
-**`OnPreCull` de la cámara 3D**, el último instante antes de dibujar.
+**`LateUpdate` is not late enough.** Ordering between MonoBehaviours is undefined, so an actor whose
+animation the game advances in its own `LateUpdate` ends up posed after ours. It only shows on
+things that move fast — a moogle's pompom, not a standing Steiner. The bake goes in the 3D camera's
+**`OnPreCull`**, the last instant before drawing.
 
-**Y `BakeMesh` aplica la escala DE MUNDO del renderer**, no la propia. `localScale = 1` en el proxy
-es correcto siempre. "Corregirlo" con `lossy/local` espeja la malla por segunda vez y tumba a todos
-los personajes — el `local (1,1,1)` frente al `lossy (-1,-1,1)` del log lo dice de un vistazo.
+**And `BakeMesh` applies the renderer's WORLD scale**, not its local one. `localScale = 1` on the
+proxy is always correct. "Fixing" it with `lossy/local` mirrors the mesh a second time and flattens
+every character — the `local (1,1,1)` next to the `lossy (-1,-1,1)` in the log says so at a glance.
 
-**Direct3D 9 no traga las variantes de sombra de luz puntual.** El juego corre en d3d9, donde Unity
-compila a shader model 2.0 salvo que se pida `#pragma target 3.0` — y aun con él,
-`multi_compile_fwdadd_fullshadows` genera los variantes de mapa de cubo (sombra de point light), que
-no caben. El shader entero cae entonces al SubShader de respaldo, en silencio: `isSupported` sigue
-siendo `true`. Se arregla con `#pragma skip_variants SHADOWS_CUBE POINT_COOKIE`, que conserva las
-sombras de **foco** y descarta solo las de luz puntual.
+**Direct3D 9 will not take the point-light shadow variants.** The game runs on d3d9, where Unity
+compiles to shader model 2.0 unless `#pragma target 3.0` is asked for — and even then,
+`multi_compile_fwdadd_fullshadows` generates the cube-map variants (point light shadows), which do
+not fit. The whole shader then falls back to the fallback SubShader, silently: `isSupported` is still
+`true`. It is fixed with `#pragma skip_variants SHADOWS_CUBE POINT_COOKIE`, which keeps **spotlight**
+shadows and discards only the point-light ones.
 
-> Y para saber qué SubShader está activo hay que mirar `Material.passCount`, que devuelve los del
-> ACTIVO. Sin eso, "los focos no proyectan" es indistinguible de "el pase no compiló", y lo segundo
-> solo se puede resolver adivinando. El cargador lo dice ahora al adoptar la escena.
+> And to know which SubShader is active you have to look at `Material.passCount`, which returns the
+> ACTIVE one's. Without that, "the spotlights do not cast" is indistinguishable from "the pass did
+> not compile", and the second can only be settled by guessing. The loader now says so when adopting
+> the scene.
 
-**`scene.new(LINK_COPY)` no comparte: copia la lista de objetos de ese instante.** Un field con dos
-BGCAM necesita dos escenas de Blender, porque la resolucion y el pixel aspect son de la ESCENA. Con
-la copia enlazada, lo que se modelase despues aparecia **solo en la escena activa** -justo lo que se
-suponia que resolvia- y la segunda escena heredaba ademas el `BackgroundPlate` de la primera, un
-plano enorme con el fondo pintado en mitad de la sala. Lo que comparte de verdad es una
-**coleccion**: `Escenario` enlazada en todas las escenas, y una coleccion por camara con su camara
-y su fondo, enlazada solo en la suya.
+**`scene.new(LINK_COPY)` does not share: it copies the object list as of that instant.** A field with
+two BGCAMs needs two Blender scenes, because resolution and pixel aspect belong to the SCENE. With
+the linked copy, anything modelled afterwards appeared **only in the active scene** —precisely what
+it was supposed to solve— and the second scene also inherited the first one's `BackgroundPlate`, a
+huge plate with the background painted on it in the middle of the room. What actually shares is a
+**collection**: `Scenery` linked into every scene, plus one collection per camera with its camera and
+its background, linked only into its own.
 
-> Se vio abriendo el `.blend` generado y listando que objetos tiene cada escena, mas un cubo de
-> prueba para ver donde caia. **Nada de esto se nota mirando el archivo en Blender**: las dos
-> escenas se ven bien recien generadas, y el fallo solo aparece al modelar.
+> This was found by opening the generated `.blend` and listing which objects each scene has, plus a
+> test cube to see where it landed. **None of it shows by looking at the file in Blender**: both
+> scenes look fine when freshly generated, and the fault only appears once you start modelling.
 
-**Restaurar un valor que era automatico lo vuelve manual.** `Camera.aspect` se deriva solo del
-viewport **hasta que se le asigna**; a partir de ahi queda clavado. El exportador de fondos abre el
-viewport para la captura y luego "restauraba" con `camera.aspect = previousAspect`, que no restaura
-nada: fija el valor que hubiera en ese instante. Y el instante importa, porque el juego estrecha el
-viewport del field un frame despues de entrar. La primera visita a un mapa exporta con el viewport
-ya estrecho y clava el valor bueno **de casualidad**; al volver, exporta un frame antes, con la
-pantalla entera, y clava 16:9 para siempre. El campo se dibuja entonces con una escala horizontal
-que no es la de su viewport y el proxy deja de casar. Lo correcto es `camera.ResetAspect()` cuando
-venia derivandose solo.
+**Restoring a value that was automatic makes it manual.** `Camera.aspect` derives itself from the
+viewport **until it is assigned**; from then on it is pinned. The background exporter opens the
+viewport for the capture and then "restored" with `camera.aspect = previousAspect`, which restores
+nothing: it pins whatever value was current at that instant. And the instant matters, because the
+game narrows the field viewport a frame after entering. The first visit to a map exports with the
+viewport already narrow and pins the right value **by luck**; coming back, it exports one frame
+earlier, full screen, and pins 16:9 forever. The field is then drawn with a horizontal scale that is
+not its viewport's and the proxy stops lining up. The correct call is `camera.ResetAspect()` when it
+was deriving itself.
 
-> El log lo tenia delante: `CAMERA ortho ... aspect=1.778 pixelRect=(x:77.68, width:1764.64 ...)`.
-> 1764.64/1080 = **1.634**, no 1.778. **Un diagnostico que imprime dos cifras que tienen que cuadrar
-> vale mas que uno que imprime la conclusion**, porque la conclusion sale bien aunque el sistema
-> este mal -el `delta=(0.0,0.0)` de al lado seguia diciendo que todo cuadraba-.
+> The log had it in plain sight: `CAMERA ortho ... aspect=1.778 pixelRect=(x:77.68, width:1764.64
+> ...)`. 1764.64/1080 = **1.634**, not 1.778. **A diagnostic that prints two figures which have to
+> agree is worth more than one that prints the conclusion**, because the conclusion comes out right
+> even when the system is wrong — the `delta=(0.0,0.0)` right next to it kept saying everything
+> agreed.
 >
-> Y esa misma prisa se llevaba el export: en el mapa 150, al volver, el fondo salia de 1920x1080 con
-> fovX 47.83 en vez de 1765x1080 con 44.36. El proyecto de Blender quedaba con una camara que no es
-> la del juego, sin que nada avisara. Ahora se espera a que el viewport lleve tres frames quieto.
+> And that same haste was breaking the export: on map 150, on returning, the background came out at
+> 1920x1080 with fovX 47.83 instead of 1765x1080 with 44.36. The Blender project was left with a
+> camera that is not the game's, with nothing warning about it. It now waits for the viewport to
+> hold still for three frames.
 
-**`FindObjectsOfType` no ve lo desactivado, y eso convierte un diff en una trampa.** Lo que se
-adopta de un bundle es la diferencia entre las raíces de antes de la carga aditiva y las de después.
-Si la foto de ANTES se saca con `FindObjectsOfType`, un objeto del juego que estuviera apagado en ese
-instante no sale en ella, y cuando el juego lo enciende unos frames más tarde parece "nuevo desde la
-carga": se lo lleva el pase 3D, reparentado y cambiado de capa. **Falla solo al volver a un mapa**,
-porque en la primera visita apenas hay objetos apagados. La foto de antes va con
-`Resources.FindObjectsOfTypeAll`; la de después NO, porque esa devuelve también assets cargados.
+**`FindObjectsOfType` does not see what is disabled, and that turns a diff into a trap.** What gets
+adopted from a bundle is the difference between the roots before the additive load and those after.
+If the BEFORE snapshot is taken with `FindObjectsOfType`, a game object that happened to be off at
+that instant is missing from it, and when the game switches it on a few frames later it looks "new
+since the load": the 3D pass takes it, reparented and moved to another layer. **It only fails on
+returning to a map**, because on the first visit there are barely any disabled objects. The before
+snapshot uses `Resources.FindObjectsOfTypeAll`; the after one does NOT, because that also returns
+loaded assets.
 
-> Sobrecoger en la foto de antes es gratis —como mucho deja algo sin adoptar, y eso se ve—.
-> Sobrecoger en la de después es lo que rompe. **Las dos fotos de un diff no tienen por qué sacarse
-> igual: cada una tiene su lado seguro por el que equivocarse.**
+> Over-collecting in the before snapshot is free —at worst it leaves something unadopted, and that is
+> visible. Over-collecting in the after one is what breaks. **The two snapshots of a diff do not have
+> to be taken the same way: each has its own safe side to err on.**
 
-**Y parar de adoptar en el primer frame que da algo es apostar a que la carga aditiva entrega todas
-sus raíces a la vez.** No lo garantiza. Lo que llegue después se queda fuera del contenedor: sin la
-escala de `SCENESCALE` y en la capa que la cámara 3D no dibuja, o sea invisible y sin avisar.
+**And stopping the adoption at the first frame that yields something is betting that the additive
+load hands over all its roots at once.** It does not guarantee that. Whatever arrives later stays
+outside the container: without the `SCENESCALE` scale and on the layer the 3D camera does not draw,
+i.e. invisible and silent.
 
-**La limpieza no puede vivir solo en el gancho de salida.** Colgarla de `ff9ShutdownStateFieldMap`
-la hace depender de que ese camino se recorra siempre —combate, menú, vídeo, volver al mismo mapa—.
-Entrar en un mapa limpia ahora también, y avisa si encuentra algo vivo del anterior. Un proxy que
-sobrevive a su mapa es una silueta de más en la máscara de profundidad.
+**Cleanup cannot live only in the exit hook.** Hanging it off `ff9ShutdownStateFieldMap` makes it
+depend on that path always being taken —battle, menu, FMV, returning to the same map. Entering a map
+now cleans up too, and warns if it finds anything alive from the previous one. A proxy that outlives
+its map is one silhouette too many in the depth mask.
 
-**La caída de una luz de Unity no es "cuánta luz llega".** El catcher oscurece por
-`alcance × (1 − sombra)`, y el alcance salía de `UnitySpotAttenuate`, que es **solo la caída por
-distancia**. Esa caída es brutal — a media distancia del alcance ya va por el 13% —, así que un foco
-de intensidad 3.5 que ilumina de sobra un plano `Standard` daba aquí un factor del 8%: una sombra
-del 8% sobre un fondo prerenderizado no se ve. Lo que llega es **caída × intensidad**, y eso es
-`_LightColor0.rgb`, que ya trae el color multiplicado por la intensidad.
+**A Unity light's falloff is not "how much light arrives".** The catcher darkens by
+`reach × (1 − shadow)`, and reach was coming from `UnitySpotAttenuate`, which is **only the distance
+falloff**. That falloff is brutal — at half the range it is already down to 13% — so a spotlight of
+intensity 3.5 that lights a `Standard` plane perfectly well gave a factor of 8% here: an 8% shadow
+over a prerendered background is invisible. What arrives is **falloff × intensity**, and that is
+`_LightColor0.rgb`, which already carries colour multiplied by intensity.
 
-> Costó tres intentos porque todo lo que se miró estaba bien: Unity generaba el mapa de sombras
-> (probado poniendo un `PRIMITIVE_PLANE … LIT` con `Standard` al lado, que sí recibía la sombra),
-> el shader compilaba entero (`passCount` = 4) y leía bien el mapa. **Un plano de material distinto
-> junto al que falla es el discriminador más barato que hay**: separa "Unity no lo hace" de "mi
-> shader no lo recoge" en una sola captura.
+> It took three attempts because everything that was checked was fine: Unity was generating the
+> shadow map (proved by putting a `PRIMITIVE_PLANE … LIT` with `Standard` next to it, which did
+> receive the shadow), the shader compiled in full (`passCount` = 4) and read the map correctly. **A
+> plate of a different material next to the one that fails is the cheapest discriminator there is**:
+> it separates "Unity is not doing it" from "my shader is not picking it up" in a single screenshot.
 >
-> Y lo que cerró el caso fue partir el factor en sus dos términos y pintar cada uno a solas en
-> blanco y negro (`CATCHERDEBUG 2` y `3`). Mirar el resultado final solo dice "no se ve nada", que
-> es compatible con cinco causas distintas. **Cuando un producto sale mal, hay que mirar los
-> factores, no el producto.**
+> And what closed the case was splitting the factor into its two terms and painting each one alone in
+> black and white (`CATCHERDEBUG 2` and `3`). Looking at the final result only says "nothing shows",
+> which is compatible with five different causes. **When a product comes out wrong, look at the
+> factors, not at the product.**
 
-#### Las herramientas de diagnóstico que quedan
+#### The diagnostic tools that remain
 
-|                     | Qué mide                                                                                                                                                                                          |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `MASKDEBUG on`      | pinta el proxy en verde sobre el render del juego. Lo único que atraviesa la cámara real                                                                                                          |
-| `CATCHERDEBUG 1..4` | saca a solas cada término del pase aditivo del catcher: 1 el pase entero en rojo, 2 la sombra, 3 el alcance, 4 el factor final. El modo va en el txt, así que se cambia sin reconstruir el bundle |
-| `CAMERA`            | error de proyección por actor **y en el centro de la malla**, que es lo que detecta un error de escala: el origen puede estar clavado y el cuerpo no                                              |
-| log al adoptar      | colliders, rangos de luz convertidos, **qué SubShader quedó activo**, shaders no soportados, batching estático                                                                                    |
+|                     | What it measures                                                                                                                                                                                |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MASKDEBUG on`      | paints the proxy green over the game's render. The only thing that goes through the real camera                                                                                                  |
+| `CATCHERDEBUG 1..4` | isolates each term of the catcher's additive pass: 1 the whole pass in red, 2 the shadow, 3 the reach, 4 the final factor. The mode lives in the txt, so it changes without rebuilding the bundle |
+| `CAMERA`            | projection error per actor **and at the mesh centre**, which is what catches a scale error: the origin can be pinned while the body is not                                                       |
+| adoption log        | colliders, converted light ranges, **which SubShader ended up active**, unsupported shaders, static batching                                                                                     |
 
-La lección, en una línea: **una comprobación que no atraviesa el sistema real no es una comprobación.**
+The lesson, in one line: **a check that does not go through the real system is not a check.**
 
-### 5.3 Modelar y llevar a Unity
+### 5.3 Modelling and taking it into Unity
 
-Se modela sobre el fondo y el walkmesh reales. Después, en Unity 5.2.3:
+You model over the real background and walkmesh. Then, in Unity 5.2.3:
 
-1. Importar el FBX y colocarlo **sin mover** (las posiciones ya son correctas)
-2. Luces, `Lightmap Static` en la geometría, `Baked GI` activo y `Precomputed Realtime GI` desactivado
+1. Import the FBX and place it **without moving it** (the positions are already correct)
+2. Lights, `Lightmap Static` on the geometry, `Baked GI` on and `Precomputed Realtime GI` off
 3. `Window > Lighting > Build`
-4. `Dynamic Shadows > Construir bundle` (menú de [BuildSceneBundle.cs](DynamicShadows/Unity/DynamicShadows/Assets/Editor/BuildSceneBundle.cs)),
-   que escribe el `.unity3d` directamente en `DynamicShadows/Mod/DynamicShadows/`
-5. Desplegar y **reiniciar el juego**
+4. `Dynamic Shadows > Build Bundle` (menu from [BuildSceneBundle.cs](DynamicShadows/Unity/DynamicShadows/Assets/Editor/BuildSceneBundle.cs)),
+   which writes the `.unity3d` straight into `DynamicShadows/Mod/DynamicShadows/`
+5. Deploy and **restart the game**
 
 ---
 
-## 6. Referencia de `MemoriaFieldObjects.txt`
+## 6. `MemoriaFieldObjects.txt` reference
 
-Vive en la raíz del juego, se relee **al cargar cada field**. Cambiar posiciones no requiere
-recompilar: basta salir y entrar del mapa.
+It ships inside the mod and is re-read **on every field load**. A copy in the game root takes
+priority over the mod's. Changing positions needs no rebuild: leave the map and walk back in.
 
-### Objetos
+### Objects
 
 ```
-<fldMapNo> <modelo> <x> <y> <z> [escala] [LIT]
+<fldMapNo> <model> <x> <y> <z> [scale] [LIT]
 ```
 
-- `LIT` → lo dibuja la cámara 3D con shader `Standard`, con luz y sombras. Sin `LIT` usa la
-  proyección PSX del juego.
-- Modelos: un nombre GEO registrado, `PRIMITIVE_CUBE` o `PRIMITIVE_PLANE`.
-- `@` delante de la X hace las coordenadas relativas a `bgi.charPos`. **Ojo**: eso _no_ es el punto
-  de entrada (en el mapa 150 vale `(-1423, 0, 1347)` mientras se anda en Z 23..430).
+- `LIT` → drawn by the 3D camera with the `Standard` shader, with light and shadows. Without `LIT`
+  it uses the game's PSX projection.
+- Models: a registered GEO name, `PRIMITIVE_CUBE` or `PRIMITIVE_PLANE`.
+- A `@` in front of the X makes the coordinates relative to `bgi.charPos`. **Careful**: that is _not_
+  the entry point (on map 150 it is `(-1423, 0, 1347)` while you walk in Z 23..430).
 
-### Ajustes globales
+### Global settings
 
-| Línea                                           | Efecto                                                                  |
-| ----------------------------------------------- | ----------------------------------------------------------------------- |
-| `SCENESCALE <factor>`                           | unidades de campo por unidad de escena (345)                            |
-| `SCENEBUNDLE <mapa> <archivo> [escena]`         | carga un bundle de escena de Unity                                      |
-| `AMBIENT <r> <g> <b> [intensidad]`              | luz ambiental del pase 3D, 0–1 por canal                                |
-| `LIGHT <eulerX> <eulerY> <eulerZ> [intensidad]` | direccional creada por código; **no usar si el bundle ya trae la suya** |
-| `SHADOWDISTANCE <unidades>`                     | por defecto son 40, insuficiente en escala de campo                     |
-| `PLAYER3D off\|shadow\|full\|only`              | modo del proxy del personaje                                            |
+| Line                                            | Effect                                                              |
+| ----------------------------------------------- | ------------------------------------------------------------------- |
+| `SCENESCALE <factor>`                           | field units per scene unit (345)                                    |
+| `SCENEBUNDLE auto`                              | loads `<fldMapNo>.unity3d` on every map that has one                |
+| `SCENEBUNDLE <map> <file> [scene]`              | loads one specific Unity scene bundle                               |
+| `AMBIENT <r> <g> <b> [intensity]`               | ambient light of the 3D pass, 0–1 per channel                       |
+| `LIGHT <eulerX> <eulerY> <eulerZ> [intensity]`  | directional created in code; **do not use if the bundle brings one** |
+| `SHADOWDISTANCE auto \| <units>`                | `auto` measures it per map; the default 40 is useless at field scale |
+| `CHARLIGHT <gain>`                              | how much of the scene's light reaches the characters                |
+| `PLAYER3D off\|shadow\|full\|only`              | character proxy mode                                                |
 
-### Diagnóstico
+### Diagnostics
 
-| Línea         | Efecto                                                                           |
-| ------------- | -------------------------------------------------------------------------------- |
-| `TRACE`       | posición del jugador en `Memoria.log` al andar, en unidades de campo y de escena |
-| `CAMERA`      | compara la proyección PSX con la de la cámara derivada, e informa del proxy      |
-| `DUMP`        | renderers y materiales de lo spawneado y del jugador                             |
-| `PROBE`       | shaders y capacidades de sombra que sobrevivieron al stripping del build         |
-| `EXPORTSCENE` | vuelca el mapa actual (§5.1)                                                     |
-
----
-
-## 7. Trampas conocidas
-
-Cada una de estas costó al menos una iteración. Están ordenadas por probabilidad de reaparecer.
-
-**Material sin textura = invisible (vía PSX).** `PSX/FieldMapActor` descarta todo píxel donde
-`alphaTextura * alphaColorVértice <= 0.5`. Sin textura, Unity usa la que declara el shader
-(`"grey"`), cuyo alpha no es 1, y el modelo entero desaparece. El código asigna una textura blanca
-de emergencia. _No aplica a los materiales que vienen dentro de un bundle._
-
-**`Batching Static` rompe el escalado en runtime.** Unity precombina las mallas en tiempo de build
-con su transformada horneada en los vértices, y el renderer ignora el transform después. Síntoma:
-`SCENESCALE` no tiene efecto y la escena se ve a tamaño métrico. Solución:
-`Edit > Project Settings > Player > Rendering` → desmarcar **Static Batching**. El cargador lo
-detecta y avisa.
-
-**La escala de campo rompe todo ajuste "por unidad" de Unity.** Ya nos mordió con `shadowDistance`
-(40 por defecto) y con `Baked Resolution`. Aparecerá con tamaños de partícula, LOD y física. Regla:
-si un ajuste viene en unidades, está pensado para metros.
-
-**`AssetBundle.CreateFromFile` solo abre bundles sin comprimir.** `BuildStreamedSceneAssetBundle`
-comprime por defecto (`UnityWeb`, LZMA). El script de editor pasa `BuildOptions.UncompressedAssetBundle`
-y el cargador tiene un plan B con `CreateFromMemoryImmediate`. La cabecera del `.unity3d` lleva la
-versión de Unity en texto plano — útil para diagnosticar.
-
-**Regenerar el bundle exige reiniciar el juego.** Los bundles se quedan abiertos toda la sesión
-porque `CreateFromFile` falla al abrir dos veces el mismo archivo.
-
-**Cerrar Blender antes de regenerar el `.blend`.** Blender no bloquea el archivo; la instancia
-abierta conserva la versión vieja en memoria y la escribe encima al guardar.
-
-**El script de despliegue no sobrescribe `MemoriaFieldObjects.txt`** salvo con `-ResetConfig`. Es
-deliberado (permite ajustar posiciones en el juego), pero explica varios "no funciona" que en
-realidad eran configuración vieja.
-
-**`bgi.charPos` no es el punto de entrada.** Es la posición por defecto que usa `FieldMap.AddPlayer`
-solo en modo debug. Para coordenadas útiles, usar `TRACE`.
-
-**Los bounds del personaje están inflados a propósito.** `FieldMapActor` los pone a
-`Single.MaxValue * 0.01f` para desactivar el culling, porque la proyección PSX ocurre en el vertex
-shader. Cualquier diagnóstico basado en `renderer.bounds` del jugador da basura.
-
-**Comparar alturas a ojo no funciona.** En una vista cenital a 3/4 la profundidad se traduce en
-altura de pantalla: un objeto más lejano se dibuja más arriba y parece más alto. Por eso el factor
-de escala salió de la tabla del juego y no de la percepción.
-
-**Una rotación de 180° no se ve.** A diferencia de un espejo, deja la escena con aspecto normal.
-Solo se detecta midiendo el viaje completo hasta el juego.
+| Line                | Effect                                                                        |
+| ------------------- | ----------------------------------------------------------------------------- |
+| `TRACE`             | player position in `Memoria.log` while walking, in field and scene units      |
+| `CAMERA`            | compares the PSX projection with the derived camera's, and reports on the proxy |
+| `DUMP`              | renderers and materials of what was spawned and of the player                 |
+| `MASKDEBUG [on\|off]` | paints the character proxy green over the game's render                     |
+| `CATCHERDEBUG 1..4` | isolates each term of the catcher's additive light pass                       |
+| `PROBE`             | shaders and shadow capabilities that survived the build's stripping           |
+| `EXPORTSCENE`       | dumps the current map (§5.1)                                                  |
 
 ---
 
-## 8. Herramientas de verificación
+## 7. Known traps
 
-| Herramienta                                                    | Uso                                                                                                                                                |
-| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [check_export.py](DynamicShadows/Tools/blender/check_export.py) | comprueba una exportación **sin abrir Blender**: proyecta el walkmesh por la ruta del juego y por la de Blender y reporta la desviación en píxeles |
-| [dump_fbx.py](DynamicShadows/Tools/dump_fbx.py)                         | valida un FBX contra lo que exige el importador de Memoria (material obligatorio, UVs, `Lcl Scaling`)                                              |
-| [make_cube_fbx.py](DynamicShadows/Tools/make_cube_fbx.py)               | genera un FBX de prueba con Blender headless                                                                                                       |
-| `CAMERA` en el `.txt`                                          | verificación continua en el juego: `delta` debe ser `0.00`                                                                                         |
+Each of these cost at least one iteration. They are ordered by how likely they are to come back.
 
-**Verificaciones superadas**, por si hay que rehacerlas tras un cambio grande:
+**A material with no texture = invisible (via PSX).** `PSX/FieldMapActor` discards every pixel where
+`textureAlpha * vertexColourAlpha <= 0.5`. With no texture, Unity uses the one the shader declares
+(`"grey"`), whose alpha is not 1, and the whole model disappears. The code assigns an emergency white
+texture. _Does not apply to materials that come inside a bundle._
+
+**`Batching Static` breaks runtime scaling.** Unity precombines the meshes at build time with their
+transform baked into the vertices, and the renderer ignores the transform afterwards. Symptom:
+`SCENESCALE` has no effect and the scene renders at metric size. Fix:
+`Edit > Project Settings > Player > Rendering` → untick **Static Batching**. The loader detects it
+and warns.
+
+**Field scale breaks every "per unit" Unity setting.** It has already bitten us with
+`shadowDistance` (40 by default) and with `Baked Resolution`. It will show up again with particle
+sizes, LOD and physics. Rule of thumb: if a setting comes in units, it was designed for metres.
+
+**`AssetBundle.CreateFromFile` only opens uncompressed bundles.**
+`BuildStreamedSceneAssetBundle` compresses by default (`UnityWeb`, LZMA). The editor script passes
+`BuildOptions.UncompressedAssetBundle` and the loader has a fallback using
+`CreateFromMemoryImmediate`. The `.unity3d` header carries the Unity version in plain text — useful
+for diagnosis.
+
+**Regenerating the bundle requires restarting the game.** Bundles stay open for the whole session
+because `CreateFromFile` fails when opening the same file twice.
+
+**Close Blender before regenerating the `.blend`.** Blender does not lock the file; the open instance
+keeps the old version in memory and writes it over yours on save.
+
+**The deploy script does not put `MemoriaFieldObjects.txt` in the game root** unless `-EditConfig` is
+passed, and if one is already there it warns that it takes priority over the mod's. That is
+deliberate — it is what allows tuning positions in game — but it explains several "it does not work"
+reports that were really stale configuration.
+
+**`bgi.charPos` is not the entry point.** It is the default position `FieldMap.AddPlayer` uses only
+in debug mode. For useful coordinates, use `TRACE`.
+
+**The character's bounds are inflated on purpose.** `FieldMapActor` sets them to
+`Single.MaxValue * 0.01f` to disable culling, because the PSX projection happens in the vertex
+shader. Any diagnostic based on the player's `renderer.bounds` gives garbage.
+
+**Comparing heights by eye does not work.** In a 3/4 top-down view, depth translates into screen
+height: a more distant object is drawn higher up and looks taller. That is why the scale factor came
+from the game's own table and not from perception.
+
+**A 180° rotation is invisible.** Unlike a mirror, it leaves the scene looking normal. It can only be
+detected by measuring the full round trip back into the game.
+
+---
+
+## 8. Verification tools
+
+| Tool                                                            | Use                                                                                                                                     |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| [check_export.py](DynamicShadows/Tools/blender/check_export.py)  | checks an export **without opening Blender**: projects the walkmesh via the game's route and via Blender's and reports the pixel deviation |
+| [dump_fbx.py](DynamicShadows/Tools/dump_fbx.py)                  | validates an FBX against what Memoria's importer requires (mandatory material, UVs, `Lcl Scaling`)                                      |
+| [make_cube_fbx.py](DynamicShadows/Tools/make_cube_fbx.py)        | generates a test FBX with headless Blender                                                                                              |
+| `CAMERA` in the `.txt`                                           | continuous verification in game: `delta` must be `0.00`                                                                                 |
+
+**Verifications passed**, in case they have to be redone after a large change:
 
 ```
-coordenadas de campo → cámara del juego      delta 0.00 px
-    (3 distancias de proyección, 2 cámaras, mapas estrechos y anchos, scroll en X e Y)
-coordenadas de campo → proyecto de Blender   desviación máx. 0.00 px
-Blender → FBX → Unity → juego                3 marcadores en ejes distintos, exactos
+field coordinates -> game camera          delta 0.00 px
+    (3 projection distances, 2 cameras, narrow and wide maps, scrolling in X and Y)
+field coordinates -> Blender project      max deviation 0.00 px
+Blender -> FBX -> Unity -> game           3 markers on different axes, exact
 ```
 
 ---
 
-## 9. Estado y trabajo pendiente
+## 9. Status and remaining work
 
-### Hecho
+### Done
 
-- Cámara en perspectiva derivada del field, exacta al píxel
-- Luz direccional real y sombras proyectadas
-- Personaje en el pase 3D con sombra y profundidad correctas
-- Carga de escenas de Unity con lightmaps horneados
-- Exportador de mapas y generador de proyectos de Blender
-- Escala calibrada y cadena de coordenadas verificada de punta a punta
+- Perspective camera derived from the field, pixel exact
+- Real directional light and cast shadows
+- Character in the 3D pass with correct shadow and depth
+- Unity scenes loaded with baked lightmaps
+- Map exporter and Blender project generator
+- Calibrated scale and a coordinate chain verified end to end
 
-### Hito 4 — sustituir el fondo
+### Milestone 4 — replacing the background
 
-Cuando haya geometría real que enseñar. Sin incógnitas técnicas:
+For when there is real geometry to show. No technical unknowns:
 
-1. Dejar de dibujar `BGSCENE_DEF` y sus overlays
-2. `clearFlags` de la cámara 3D de `Depth` a `SolidColor` o `Skybox`
-3. Quitar la sombra falsa de `FieldMapActor.CreateShadowMesh`, que pasa a sobrar
+1. Stop drawing `BGSCENE_DEF` and its overlays
+2. Change the 3D camera's `clearFlags` from `Depth` to `SolidColor` or `Skybox`
+3. Remove the fake shadow in `FieldMapActor.CreateShadowMesh`, which becomes redundant
 
-### Cuestiones abiertas
+### Open questions
 
-**VFX del juego.** Las antorchas de FFIX son animaciones de fotogramas del fondo (`BGANIM_DEF`,
-opcodes `EBG_anim*`) y **se pierden al sustituirlo**: hay que rehacerlas en la escena 3D. Los
-efectos SPS (`SPSEffect`, humo, magia, lluvia) sí sobreviven porque son objetos aparte, pero se
-dibujan en el pase PSX con profundidad falsa y compondrían mal contra geometría 3D: habría que
-enrutarlos al pase 3D como se hizo con el personaje.
+**The game's VFX.** FFIX's torches are frame animations of the background (`BGANIM_DEF`, `EBG_anim*`
+opcodes) and **are lost when it is replaced**: they have to be redone in the 3D scene. SPS effects
+(`SPSEffect`, smoke, magic, rain) do survive because they are separate objects, but they are drawn in
+the PSX pass with fake depth and would composite badly against 3D geometry: they would have to be
+routed into the 3D pass the way the character was.
 
-**Light probes.** `probes: 0` en todas las pruebas. Sin ellos, el personaje solo recibe la
-direccional y la ambiental, y no reacciona a las luces locales del escenario. Alternativa sin
-probes: separar en dos capas —escenario estático y personaje— y usar point lights en tiempo real
-con `cullingMask` limitado a la capa del personaje.
+**Light probes.** `probes: 0` in every test. Without them the character only receives the directional
+and the ambient, and does not react to the scenery's local lights. An alternative without probes:
+split into two layers —static scenery and character— and use realtime point lights with `cullingMask`
+restricted to the character's layer.
 
-**Partículas.** Los módulos del `ParticleSystem` (`emission`, `shape`, `colorOverLifetime`,
-`textureSheetAnimation`) **no son accesibles por script en Unity 5.2** — llegaron en 5.3. Solo hay
-propiedades de primer nivel. Un sistema de partículas decente es contenido de editor. Además no se
-ha comprobado que los shaders `Particles/*` sobrevivieran al stripping: añadirlos a `PROBE` antes
-de contar con ellos.
+**Particles.** The `ParticleSystem` modules (`emission`, `shape`, `colorOverLifetime`,
+`textureSheetAnimation`) **are not script-accessible in Unity 5.2** — they arrived in 5.3. Only
+top-level properties exist. A decent particle system is editor content. On top of that it has not
+been checked that the `Particles/*` shaders survived stripping: add them to `PROBE` before counting
+on them.
 
-**Shaders propios.** Unity **no compila Cg/HLSL en runtime**: `ShadersLoader` usa
-`new Material(shaderCode)` y los 140 subprogramas del repo son ensamblador `d3d9`. Un shader nuevo
-habría que escribirlo así. Los built-in `Standard`, `Diffuse`, `Legacy Shaders/Diffuse`, `VertexLit`,
-`Mobile/VertexLit` y `Unlit/Transparent Cutout` **sí** sobrevivieron al stripping y traen
-ShadowCaster; `Bumped Diffuse`, `Mobile/Diffuse`, `Transparent/Cutout/Diffuse` y `Unlit/Texture` no.
-
----
-
-## 10. Mapa de archivos
-
-### Código del motor (`Assembly-CSharp/Memoria/Field/`)
-
-| Archivo                     | Responsabilidad                                                        |
-| --------------------------- | ---------------------------------------------------------------------- |
-| `FieldPerspectiveCamera.cs` | derivación de la cámara, pase 3D, proxy del personaje, luz y ambiental |
-| `CustomFieldObjects.cs`     | lectura de `MemoriaFieldObjects.txt`, spawn de objetos, diagnósticos   |
-| `FieldSceneBundle.cs`       | carga de bundles de escena de Unity y adopción al pase 3D              |
-| `FieldSceneExport.cs`       | exportación de cámara, fondo y walkmesh                                |
-
-Puntos de enganche en el juego: `HonoluluFieldMain.ff9InitStateFieldMap` (spawn al cargar el mapa)
-y `HonoluluFieldMain.HonoUpdate` (sincronización por frame).
-
-### Herramientas
-
-| Archivo                                       | Uso                                              |
-| --------------------------------------------- | ------------------------------------------------ |
-| `DynamicShadows/Tools/build-and-deploy.ps1`           | compilar y desplegar                                  |
-| `DynamicShadows/Tools/blender/build_field_project.py` | generar el proyecto de Blender de un mapa             |
-| `DynamicShadows/Tools/blender/check_export.py`        | verificar una exportación sin Blender                 |
-| `DynamicShadows/Unity/.../Assets/Editor/`             | menús `Dynamic Shadows >` del editor de Unity         |
-| `DynamicShadows/Tools/dump_fbx.py`, `make_cube_fbx.py`| utilidades de FBX                                     |
-
-### Datos
-
-- `DynamicShadows/Mod/DynamicShadows/` — el mod tal y como se instala: `ModDescription.xml`,
-  `MemoriaFieldObjects.txt`, `DictionaryPatch.txt`, los bundles y los assets
-- `MemoriaFieldObjects.txt` — configuración (la fuente; la copia viva está en la raíz del juego)
-- `<juego>/MemoriaSceneExport/<mapa>/` — exportaciones
-- `<juego>/Memoria.log` — log; se recrea en cada arranque
+**Custom shaders.** Unity **does not compile Cg/HLSL at runtime**: `ShadersLoader` uses
+`new Material(shaderCode)` and the repo's 140 subprograms are `d3d9` assembly. A new shader would
+have to be written that way. The built-in `Standard`, `Diffuse`, `Legacy Shaders/Diffuse`,
+`VertexLit`, `Mobile/VertexLit` and `Unlit/Transparent Cutout` **did** survive stripping and carry a
+ShadowCaster; `Bumped Diffuse`, `Mobile/Diffuse`, `Transparent/Cutout/Diffuse` and `Unlit/Texture`
+did not.
 
 ---
 
-## 11. Nota de método
+## 10. File map
 
-El patrón que ha funcionado, y que conviene mantener: **cuando algo no se ve, no adivinar**.
-Añadir un diagnóstico que imprima el dato que distingue entre las hipótesis, y decidir con el
-número. Varios de los errores de esta sesión —la inversión izquierda/derecha, el static batching, la
-rotación de 180°— eran invisibles a simple vista y solo cayeron al medirlos.
+### Engine code (`Assembly-CSharp/Memoria/Field/`)
 
-Y al revés: dos de los diagnósticos iniciales fueron **falsos positivos** que costaron iteraciones
-—los colores de vértice y el determinante de la matriz de vista—. Conviene comprobar una hipótesis
-antes de construir sobre ella.
+| File                        | Responsibility                                                       |
+| --------------------------- | -------------------------------------------------------------------- |
+| `FieldPerspectiveCamera.cs` | camera derivation, 3D pass, character proxy, light and ambient       |
+| `CustomFieldObjects.cs`     | reading `MemoriaFieldObjects.txt`, spawning objects, diagnostics     |
+| `FieldSceneBundle.cs`       | loading Unity scene bundles and adopting them into the 3D pass       |
+| `FieldSceneExport.cs`       | exporting camera, background and walkmesh                            |
+
+Hook points in the game, all in `HonoluluFieldMain`: `ff9InitStateFieldMap` (spawn on map load),
+`HonoUpdate` (per-frame sync), `HonoLateUpdate` and `ff9ShutdownStateFieldMap` (cleanup).
+
+### Tools
+
+| File                                                   | Use                                            |
+| ------------------------------------------------------ | ---------------------------------------------- |
+| `DynamicShadows/Tools/build-and-deploy.ps1`            | build and deploy                               |
+| `DynamicShadows/Tools/blender/build_field_project.py`  | generate a map's Blender project               |
+| `DynamicShadows/Tools/blender/update_field_project.py` | refresh an existing project without losing work |
+| `DynamicShadows/Tools/blender/check_export.py`         | verify an export without Blender               |
+| `DynamicShadows/Unity/.../Assets/Editor/`              | the `Dynamic Shadows >` menus in the Unity editor |
+| `DynamicShadows/Tools/dump_fbx.py`, `make_cube_fbx.py` | FBX utilities                                  |
+
+### Data
+
+- `DynamicShadows/Mod/DynamicShadows/` — the mod exactly as installed: `ModDescription.xml`,
+  `MemoriaFieldObjects.txt`, `DictionaryPatch.txt`, the bundles and the assets
+- `<game>/MemoriaFieldObjects.txt` — optional live override, takes priority over the mod's
+- `<game>/MemoriaSceneExport/<map>/` — exports
+- `<game>/Memoria.log` — log; recreated on every launch
+
+---
+
+## 11. A note on method
+
+The pattern that has worked, and is worth keeping: **when something is not visible, do not guess.**
+Add a diagnostic that prints the figure separating the hypotheses, and decide with the number.
+Several of this project's bugs —the left/right inversion, the static batching, the 180° rotation—
+were invisible to the naked eye and only fell once measured.
+
+And the other way round: two of the early diagnostics were **false positives** that cost iterations
+—the vertex colours and the determinant of the view matrix. It is worth confirming a hypothesis
+before building on it.

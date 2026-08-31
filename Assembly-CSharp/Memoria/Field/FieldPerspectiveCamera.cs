@@ -190,7 +190,7 @@ namespace Memoria.Field
         private static readonly Int32 StencilRefPropertyId = Shader.PropertyToID("_StencilRef");
         private static readonly Int32 StencilCompPropertyId = Shader.PropertyToID("_StencilComp");
         private static readonly Int32 StencilOpPropertyId = Shader.PropertyToID("_StencilOp");
-        // Valores de ShaderLab: Comp Always = 8, Op Replace = 2, Op Keep = 0.
+        // ShaderLab values: Comp Always = 8, Op Replace = 2, Op Keep = 0.
         private const Single StencilAlways = 8f;
         private const Single StencilReplace = 2f;
         private const Single StencilKeep = 0f;
@@ -715,7 +715,7 @@ namespace Memoria.Field
             _probeTotal = total;
             _probeReference = reference;
 
-            // Dos efectos distintos, con referencias distintas.
+            // Two different effects, with different references.
             //
             // Darkening in shadow is measured against the light that would arrive with nothing in
             // the way. It is a fraction, never above 1, and dividing is the right thing.

@@ -116,7 +116,7 @@ def main():
     print("  background.png   : %sx%s" % png if png else "  background.png   : ilegible")
     print("  vertices         : %s  (behind the camera: %s)" % (len(vertices), behind))
     if xs:
-        print("  walkmesh en px   : X [%.0f, %.0f]   Y [%.0f, %.0f]" % (min(xs), max(xs), min(ys), max(ys)))
+        print("  walkmesh in px   : X [%.0f, %.0f]   Y [%.0f, %.0f]" % (min(xs), max(xs), min(ys), max(ys)))
         inside = sum(1 for x, y in zip(xs, ys) if 0 <= x <= width and 0 <= y <= height)
         print("  inside the frame : %s of %s" % (inside, len(xs)))
     if bxs:

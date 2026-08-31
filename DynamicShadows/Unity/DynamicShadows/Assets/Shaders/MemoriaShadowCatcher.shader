@@ -114,7 +114,7 @@ Shader "Memoria/ShadowCatcher"
 
             fixed4 frag(v2f i) : SV_Target
             {
-                // atten = 1 iluminado, 0 en sombra.
+                // atten = 1 lit, 0 in shadow.
                 fixed atten = LIGHT_ATTENUATION(i);
                 fixed3 tint = lerp(_ShadowColor.rgb, fixed3(1,1,1), atten);
                 return fixed4(lerp(fixed3(1,1,1), tint, _Strength), 1);
