@@ -102,7 +102,7 @@ Check `Memoria.log` in the game folder:
 | no `[CustomFieldObjects]` lines at all | the mod is not active — check `[Mod] FolderNames`          |
 | `[FieldSceneBundle] Bundle not found`  | the `.unity3d` did not deploy; rerun with `-SkipBuild`     |
 | settings applied but no shadow         | check `PLAYER3D` is not `off` in `MemoriaFieldObjects.txt` |
-| the scene changed but the game did not | bundles stay open for the session — **restart the game**   |
+| you rebuilt a scene and nothing changed | `Build Bundle` only writes into the repo — **deploy** with `-SkipBuild`, then **restart the game** |
 
 ### Compatibility
 
@@ -225,13 +225,25 @@ In Unity **5.2.3f1**, open `DynamicShadows/Unity/DynamicShadows/`:
    `Window > Lighting > Build`.
 5. Save the scene as **`<map number>.unity`**.
 
-### 5. Build the bundle
+### 5. Build the bundle, then deploy it
 
-**`Dynamic Shadows > Build Bundle`** writes `<map>.unity3d` straight into
-`DynamicShadows/Mod/DynamicShadows/`. There is no copy step to forget.
+**`Dynamic Shadows > Build Bundle`** writes `<map>.unity3d` into `DynamicShadows/Mod/DynamicShadows/`
+— the mod folder **in the repo**. That is not the folder the game reads, so building alone changes
+nothing in game. Deploy it:
 
-Then deploy and **restart the game** — bundles stay open for the whole session, so a running game
-will not pick up a rebuilt one.
+```powershell
+.\DynamicShadows\Tools\build-and-deploy.ps1 -SkipBuild
+```
+
+Then **restart the game.** Bundles stay open for the whole session, because `CreateFromFile` refuses
+to open the same file twice, so a running game will never pick up a rebuilt one.
+
+> Both steps fail silently if you skip them: the game just keeps showing the previous version of
+> your scene, with no error anywhere. If a change does not show up, compare the two files before
+> suspecting the scene —
+> `DynamicShadows\Mod\DynamicShadows\150.unity3d` against
+> `<game>\DynamicShadows\150.unity3d`. Different timestamps mean you have not deployed; identical
+> ones mean you have not restarted.
 
 ### 6. Check it
 
