@@ -1,10 +1,11 @@
-// Menú "Dynamic Shadows > Preparar escena".
+// Menu "Dynamic Shadows > Setup Scene".
 //
-// Prepara la escena abierta para la prueba de sombras: crea los materiales si no existen, pone el
-// material de shadow catcher en toda la geometría, añade la direccional y deja el portador del
-// material del personaje. Es todo lo que hay que hacer aparte de meter tus FBX en la escena.
+// Prepares the open scene for the shadow pass: creates the materials if they do not exist, puts the
+// shadow catcher material on all the geometry, checks the lighting and leaves the carrier for the
+// character material. It is everything that has to be done apart from putting your FBX in the
+// scene.
 //
-// Se puede ejecutar las veces que haga falta: no duplica nada.
+// It can be run as many times as needed: it duplicates nothing.
 
 using UnityEditor;
 using UnityEngine;
@@ -17,7 +18,7 @@ public static class SetupDynamicShadowsScene
     private const string CarrierName = "MemoriaCharacterMaterial";
     private const string MaterialFolder = "Assets/Materials";
 
-    [MenuItem("Dynamic Shadows/Preparar escena")]
+    [MenuItem("Dynamic Shadows/Setup Scene")]
     public static void Setup()
     {
         Material catcher = GetOrCreateMaterial(CatcherShader, "ShadowCatcher");
@@ -27,7 +28,7 @@ public static class SetupDynamicShadowsScene
 
         GameObject carrier = SetupCarrier(actor);
 
-        // Toda la geometría de la escena pasa a ser catcher, menos el portador.
+        // All the scene geometry becomes catcher, except the carrier.
         int painted = 0;
         foreach (MeshRenderer renderer in Object.FindObjectsOfType<MeshRenderer>())
         {
@@ -39,9 +40,9 @@ public static class SetupDynamicShadowsScene
                 materials[i] = catcher;
             renderer.sharedMaterials = materials;
 
-            // El batching estático hornea la transformada en los vértices al construir el bundle,
-            // y eso anula la escala del contenedor (SCENESCALE) en runtime: la geometría seguiría
-            // dibujándose a su tamaño de autoría mientras el transform dice otra cosa.
+            // Static batching bakes the transform into the vertices when the bundle is built, and
+            // that cancels the container's scale (SCENESCALE) at runtime: the geometry would keep
+            // drawing at its authoring size while the transform says otherwise.
             renderer.gameObject.isStatic = false;
             painted++;
         }
@@ -49,9 +50,9 @@ public static class SetupDynamicShadowsScene
         SetupLight();
 
         Debug.Log(string.Format(
-            "[DynamicShadows] Listo: {0} objeto(s) con el shadow catcher. Guarda la escena con el " +
-            "numero de mapa por nombre (150.unity para Cast. Alex./Guardia) y usa " +
-            "Dynamic Shadows > Construir bundle.", painted));
+            "[DynamicShadows] Done: {0} object(s) now use the shadow catcher. Save the scene named " +
+            "after the map number (150.unity for Cast. Alex./Guard) and use " +
+            "Dynamic Shadows > Build Bundle.", painted));
     }
 
     private static Material GetOrCreateMaterial(string shaderName, string assetName)
@@ -60,8 +61,8 @@ public static class SetupDynamicShadowsScene
         if (shader == null)
         {
             Debug.LogError(string.Format(
-                "[DynamicShadows] No encuentro el shader '{0}'. Comprueba que " +
-                "Assets/Shaders/*.shader está en el proyecto y que compila sin errores.", shaderName));
+                "[DynamicShadows] Cannot find shader '{0}'. Check that " +
+                "Assets/Shaders/*.shader is in the project and compiles without errors.", shaderName));
             return null;
         }
 
@@ -80,17 +81,17 @@ public static class SetupDynamicShadowsScene
         }
         Material material = new Material(shader);
         AssetDatabase.CreateAsset(material, path);
-        Debug.Log("[DynamicShadows] Material creado: " + path);
+        Debug.Log("[DynamicShadows] Material created: " + path);
         return material;
     }
 
     /// <summary>
-    /// Objeto que lleva el material del personaje para que viaje dentro del bundle: un shader no se
-    /// puede compilar en runtime, así que esta es la única vía de meterlo en el juego.
+    /// An object carrying the character material so that it travels inside the bundle: a shader
+    /// cannot be compiled at runtime, so this is the only way to get it into the game.
     ///
-    /// Queda ACTIVO con el MeshRenderer desmarcado, y no al revés. El mod localiza el contenido de
-    /// la escena recorriendo los objetos raíz con FindObjectsOfType, que no devuelve los que están
-    /// desactivados: un portador desactivado en la raíz no se encontraría nunca.
+    /// It is left ACTIVE with the MeshRenderer unchecked, and not the other way round. The mod
+    /// finds the scene content by walking the root objects with FindObjectsOfType, which does not
+    /// return disabled ones: a disabled carrier at the root would never be found.
     /// </summary>
     private static GameObject SetupCarrier(Material actor)
     {
@@ -100,7 +101,7 @@ public static class SetupDynamicShadowsScene
             carrier = GameObject.CreatePrimitive(PrimitiveType.Quad);
             carrier.name = CarrierName;
             Object.DestroyImmediate(carrier.GetComponent<Collider>());
-            Debug.Log("[DynamicShadows] Portador del material del personaje creado.");
+            Debug.Log("[DynamicShadows] Character material carrier created.");
         }
 
         carrier.SetActive(true);
@@ -122,25 +123,25 @@ public static class SetupDynamicShadowsScene
             break;
         }
 
-        // No se crea ninguna direccional. La escena decide su iluminación, y un mapa alumbrado
-        // solo con focos es una decisión legítima: imponer una direccional obliga a borrarla cada
-        // vez que se pasa por aquí. Solo se avisa si no hay ninguna luz, que sí es un olvido.
+        // No directional is created. The scene decides its own lighting, and a map lit only by
+        // spotlights is a legitimate decision: forcing a directional would mean deleting it every
+        // time this runs. It only warns when there is no light at all, which really is an oversight.
         if (directional == null && Object.FindObjectsOfType<Light>().Length == 0)
         {
-            Debug.LogWarning("[DynamicShadows] La escena no tiene ninguna luz. Sin al menos una con " +
-                             "sombras activadas, el catcher no tiene nada que recoger y no se verá " +
-                             "ninguna sombra.");
+            Debug.LogWarning("[DynamicShadows] The scene has no light at all. Without at least one " +
+                             "with shadows enabled the catcher has nothing to catch and no shadow " +
+                             "will be seen.");
         }
 
-        // Sin esto no hay nada que recoger: el catcher solo pinta la atenuación de sombra. Y vale
-        // para toda luz, no solo la direccional: un foco sin Shadow Type no proyecta nada, y es
-        // fácil ponerlo y quedarse sin entender por qué no se ve su sombra.
+        // Without this there is nothing to catch: the catcher only paints shadow attenuation. And it
+        // applies to every light, not just the directional: a spotlight with no Shadow Type casts
+        // nothing, and it is easy to place one and never work out why its shadow is missing.
         foreach (Light light in Object.FindObjectsOfType<Light>())
         {
             if (light == null || light.shadows != LightShadows.None)
                 continue;
             light.shadows = LightShadows.Soft;
-            Debug.Log("[DynamicShadows] '" + light.name + "' no tenía sombras activadas; puesto en Soft.");
+            Debug.Log("[DynamicShadows] '" + light.name + "' had no shadows enabled; set to Soft.");
         }
     }
 }

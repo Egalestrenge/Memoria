@@ -30,7 +30,7 @@ namespace Memoria.Field
         // file is opened twice, and every field transition re-adds the scene.
         private static readonly Dictionary<String, AssetBundle> _bundles = new Dictionary<String, AssetBundle>();
 
-        /// <summary>Frames que se sigue mirando despues de la primera adopcion. Ver Update.</summary>
+        /// <summary>Frames to keep watching after the first adoption. See Update.</summary>
         private const Int32 AdoptGraceFrames = 5;
 
         private static String _pendingScene;
@@ -152,10 +152,11 @@ namespace Memoria.Field
                         Log.Warning($"[FieldSceneBundle] {adopted} more root object(s) turned up {_pendingFrames - _firstAdoptedFrame} frame(s) after the first batch. Either the additive load split across frames -and until now the rest was being left behind, unscaled and on the wrong layer- or the game created these and they do not belong to the scene at all.");
                 }
 
-                // No se puede parar en el primer frame que de algo. La carga aditiva no garantiza
-                // entregar todas sus raices a la vez, y parando ahi el resto se quedaba fuera: sin
-                // la escala del contenedor y en la capa que no dibuja la camara 3D, o sea invisible
-                // y sin avisar. Se sigue mirando unos frames mas y se dice si llega algo tarde.
+                // Stopping at the first frame that yields something is not safe. Additive loading
+                // does not guarantee handing over all its roots at once, and stopping there left the
+                // rest out: without the container scale and on the layer the 3D camera does not
+                // draw, i.e. invisible and silent. Keep watching a few more frames and report
+                // anything that arrives late.
                 if (_firstAdoptedFrame > 0 && _pendingFrames - _firstAdoptedFrame >= AdoptGraceFrames)
                 {
                     _pendingScene = null;
@@ -228,25 +229,26 @@ namespace Memoria.Field
             {
                 light.cullingMask = 1 << FieldPerspectiveCamera.Layer3D;
 
-                // Forzar la luz a por-pixel, o no proyecta nada.
+                // Force the light to per-pixel, or it casts nothing.
                 //
-                // En forward, Unity solo emite pases ForwardAdd para las luces que decide tratar
-                // por pixel; el resto las degrada a luz por vertice, y una luz por vertice no tiene
-                // pase ForwardAdd ni sombra, este como este configurada. El limite lo pone
-                // QualitySettings.pixelLightCount, que en un juego de 2000 suele ser 1 o 2, y
-                // reparte segun intensidad y distancia: en cuanto hay dos focos, uno se cae.
+                // In forward rendering Unity only emits ForwardAdd passes for the lights it decides
+                // to treat per-pixel; the rest are demoted to vertex lights, and a vertex light has
+                // neither a ForwardAdd pass nor a shadow, however it is configured. The cap comes
+                // from QualitySettings.pixelLightCount, usually 1 or 2 in a game from 2000, and it
+                // hands out slots by intensity and distance: the moment there are two spotlights,
+                // one drops out.
                 //
-                // ForcePixel lo saca de ese reparto. Solo se aplica a las luces con sombras
-                // activadas, que son las unicas para las que importa.
+                // ForcePixel takes it out of that contest. It is only applied to lights that have
+                // shadows enabled, the only ones it matters for.
                 if (light.shadows != LightShadows.None)
                 {
                     light.renderMode = LightRenderMode.ForcePixel;
                     shadowCasters++;
                 }
-                // Los ajustes de sombra de la propia luz, que mandan por debajo de cualquier shader:
-                // con strength 0 la sombra se calcula y llega multiplicada por nada, y un bias
-                // grande la desplaza hasta sacarla de la superficie. Ninguna de las dos se puede
-                // deducir mirando la pantalla, y las dos se parecen a "el shader no funciona".
+                // The light own shadow settings, which override any shader underneath: with
+                // strength 0 the shadow is computed and then multiplied by nothing, and a large bias
+                // pushes it clean off the surface. Neither can be deduced by looking at the screen,
+                // and both look exactly like "the shader is broken".
                 String shadowInfo = light.shadows == LightShadows.None
                     ? "no shadows"
                     : $"shadows {light.shadows}, strength {light.shadowStrength:F2}, bias {light.shadowBias:F4}, normal bias {light.shadowNormalBias:F4}";
@@ -274,9 +276,9 @@ namespace Memoria.Field
                     {
                         if (material?.shader == null || material.shader.name != FieldPerspectiveCamera.CharacterShaderName)
                             continue;
-                        // Un shader que no compila para esta plataforma no tiene ni pase de sombra,
-                        // asi que adoptarlo no solo pinta mal: deja al personaje sin proyectar nada.
-                        // Standard es peor de aspecto pero funciona, y es mejor sitio donde caer.
+                        // A shader that does not compile for this platform has no shadow pass
+                        // either, so adopting it does not merely look wrong: it leaves the character
+                        // casting nothing. Standard looks worse but works, and is a better landing.
                         if (!material.shader.isSupported)
                         {
                             Log.Warning($"[FieldSceneBundle] Character material on '{renderer.name}' uses '{material.shader.name}', which is not supported on this build. Falling back to Standard, so the character still casts a shadow (its silhouette will include the alpha-cut quads).");
@@ -291,9 +293,9 @@ namespace Memoria.Field
                 }
             }
 
-            // El presupuesto de luces por pixel tiene que dar para todas las que proyectan. ForcePixel
-            // saca a cada luz del reparto, pero el limite global sigue existiendo y Unity lo aplica
-            // igual, asi que hay que subirlo si se queda corto.
+            // The per-pixel light budget has to cover every light that casts. ForcePixel takes each
+            // light out of the contest, but the global cap still exists and Unity still enforces it,
+            // so it has to be raised when it falls short.
             if (shadowCasters > 0 && QualitySettings.pixelLightCount < shadowCasters + 1)
             {
                 Int32 before = QualitySettings.pixelLightCount;
@@ -305,7 +307,7 @@ namespace Memoria.Field
                 Log.Message($"[FieldSceneBundle] {shadowCasters} shadow-casting light(s), per-pixel budget {QualitySettings.pixelLightCount}, all forced to per-pixel.");
             }
 
-            // Diagnostico del pase aditivo del catcher, puesto desde la configuracion.
+            // Catcher additive-pass diagnostics, set from the configuration file.
             if (FieldPerspectiveCamera.CatcherDebugMode > 0)
             {
                 foreach (Renderer renderer in go.GetComponentsInChildren<Renderer>(true))
@@ -325,17 +327,18 @@ namespace Memoria.Field
                 Log.Message($"[FieldSceneBundle] Catcher additive pass in diagnostic mode {FieldPerspectiveCamera.CatcherDebugMode}: {what}.");
             }
 
-            // Que SubShader esta activo, no cual esperabamos que lo estuviera.
+            // Which SubShader is active, not which one we expected to be.
             //
-            // Los shaders del mod llevan un SubShader de respaldo por si el principal no compila en
-            // Direct3D 9, y desde fuera los dos son "soportados": isSupported no los distingue. Lo
-            // que si los distingue es el numero de pases, porque passCount devuelve los del
-            // SubShader ACTIVO. Sin esto, "los focos no proyectan sombra" es indistinguible de
-            // "el pase de sombra de los focos no compilo", y eso solo se puede resolver adivinando.
+            // The mod shaders carry a fallback SubShader in case the main one does not compile on
+            // Direct3D 9, and from the outside both are "supported": isSupported cannot tell them
+            // apart. What does tell them apart is the pass count, because passCount returns the
+            // ACTIVE SubShader ones. Without this, "the spotlights cast no shadow" is
+            // indistinguishable from "the spotlight shadow pass did not compile", and that can only
+            // be settled by guessing.
             //
-            //   Memoria/ShadowCatcher  : 4 pases el completo, 3 el de respaldo (sin ForwardAdd,
-            //                            o sea sin sombras de focos ni de luces puntuales)
-            //   Memoria/FieldActorLit  : 3 pases el completo, 2 el de respaldo (sin iluminacion)
+            //   Memoria/ShadowCatcher  : 4 passes when full, 3 on the fallback (no ForwardAdd,
+            //                            i.e. no spot or point light shadows)
+            //   Memoria/FieldActorLit  : 3 passes when full, 2 on the fallback (no lighting)
             HashSet<Shader> reported = new HashSet<Shader>();
             HashSet<Material> reportedMaterials = new HashSet<Material>();
             foreach (Renderer renderer in go.GetComponentsInChildren<Renderer>(true))
@@ -345,9 +348,9 @@ namespace Memoria.Field
                     if (material?.shader == null || !material.shader.name.StartsWith("Memoria/"))
                         continue;
 
-                    // Cuanto oscurece el catcher lo gradua el propio material, y cada mapa trae el
-                    // suyo. Con _Strength a 0, o con un color de sombra blanco, el shader hace todo
-                    // el trabajo y no se ve nada: indistinguible de un shader roto.
+                    // How much the catcher darkens is set by the material itself, and every map
+                    // brings its own. With _Strength at 0, or a white shadow colour, the shader does
+                    // all the work and nothing shows: indistinguishable from a broken shader.
                     if (material.shader.name == CatcherShaderName && reportedMaterials.Add(material)
                         && material.HasProperty("_Strength") && material.HasProperty("_ShadowColor"))
                     {
@@ -400,20 +403,22 @@ namespace Memoria.Field
         }
 
         /// <summary>
-        /// Las raices de la escena. Lo que se adopta es la diferencia entre la foto de antes de la
-        /// carga aditiva y la de despues, asi que las dos fotos no pueden sacarse igual.
+        /// The scene roots. What gets adopted is the difference between the snapshot taken before
+        /// the additive load and the one taken after, so the two snapshots cannot be taken the same
+        /// way.
         ///
-        /// La de ANTES tiene que incluir lo inactivo. FindObjectsOfType no devuelve objetos
-        /// desactivados, asi que un objeto del juego que estuviera apagado en ese instante no sale
-        /// en la foto, y cuando el juego lo enciende unos frames despues aparece como "nuevo desde
-        /// la carga": se lo lleva el pase 3D, reparentado y cambiado de capa. En la primera visita
-        /// a un mapa apenas hay objetos apagados; al volver, el juego arrastra los de la visita
-        /// anterior, y de ahi que falle solo la segunda vez.
+        /// The BEFORE snapshot has to include what is inactive. FindObjectsOfType does not return
+        /// disabled objects, so a game object that happened to be off at that instant is missing
+        /// from the snapshot, and when the game switches it on a few frames later it looks "new
+        /// since the load": the 3D pass takes it, reparented and moved to another layer. On the
+        /// first visit to a map there are barely any disabled objects; coming back, the game drags
+        /// along those from the previous visit, which is why it only failed the second time.
         ///
-        /// La de DESPUES se queda con los activos. Resources.FindObjectsOfTypeAll devuelve tambien
-        /// assets cargados -los prefabs que trae el propio bundle, por ejemplo-, y adoptar un asset
-        /// no tiene ningun sentido. Sobrecoger en la foto de antes es gratis: como mucho deja algo
-        /// sin adoptar, y eso se ve. Sobrecoger en la de despues es lo que rompe.
+        /// The AFTER snapshot keeps only what is active. Resources.FindObjectsOfTypeAll also
+        /// returns loaded assets - the prefabs the bundle itself carries, for instance - and
+        /// adopting an asset makes no sense at all. Over-collecting in the before snapshot is free:
+        /// at worst it leaves something unadopted, and that is visible. Over-collecting in the after
+        /// snapshot is what breaks.
         /// </summary>
         private static HashSet<Transform> CollectRoots(Boolean includeInactive)
         {

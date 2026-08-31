@@ -1,7 +1,7 @@
-# Lector minimo de FBX binario, para comprobar que un FBX cumple lo que el
-# importador de Memoria necesita antes de meterlo en el juego.
+# Minimal binary FBX reader, to check that an FBX meets what Memoria's importer
+# needs before putting it into the game.
 #
-# Uso:  python DynamicShadows/Tools/dump_fbx.py <archivo.fbx>
+# Usage:  python DynamicShadows/Tools/dump_fbx.py <file.fbx>
 
 import struct
 import sys
@@ -36,7 +36,7 @@ def read_prop(f):
         (length,) = struct.unpack("<I", f.read(4))
         raw = f.read(length)
         return raw.decode("utf-8", "replace") if kind == "S" else raw
-    raise ValueError("Tipo de propiedad desconocido: %r" % kind)
+    raise ValueError("Unknown property type: %r" % kind)
 
 
 def read_node(f, version):
@@ -63,10 +63,10 @@ def read_node(f, version):
 
 def parse(path):
     with open(path, "rb") as f:
-        # Cabecera: 20 bytes de texto + \x00\x1a\x00, y despues la version en 4 bytes
+        # Header: 20 bytes of text + \x00\x1a\x00, then the version in 4 bytes
         magic = f.read(23)
         if not magic.startswith(b"Kaydara FBX Binary"):
-            raise SystemExit("No es un FBX binario (Memoria tambien lee ASCII, pero este script no).")
+            raise SystemExit("Not a binary FBX (Memoria also reads ASCII, but this script does not).")
         (version,) = struct.unpack("<I", f.read(4))
         root = Node("__root__")
         while True:
@@ -84,9 +84,9 @@ def main():
     objects = root.find("Objects")
     connections = root.find("Connections")
     if not objects:
-        raise SystemExit("FALLO: no hay seccion Objects")
+        raise SystemExit("FAIL: no Objects section")
     if not connections:
-        raise SystemExit("FALLO: no hay seccion Connections (Memoria la necesita para materiales y esqueleto)")
+        raise SystemExit("FAIL: no Connections section (Memoria needs it for materials and skeleton)")
     objects = objects[0]
 
     geometries = objects.find("Geometry")
@@ -95,12 +95,12 @@ def main():
     print("Geometry: %d | Model: %d | Material: %d" % (len(geometries), len(models), len(materials)))
 
     if not materials:
-        print("FALLO: sin Material -> GetMaterialIndex devuelve -1 -> IndexOutOfRangeException")
+        print("FAIL: no Material -> GetMaterialIndex returns -1 -> IndexOutOfRangeException")
     for mat in materials:
         shading = [c for c in mat.children if c.name == "ShadingModel"]
         print("  Material %r  ShadingModel=%s" % (mat.props[1], shading[0].props[0] if shading else "?"))
 
-    # Memoria hornea la transformada del nodo Model en los vertices
+    # Memoria bakes the Model node transform into the vertices
     # (FbxBone lee "Lcl Translation" / "Lcl Rotation" / "Lcl Scaling").
     for model in models:
         props = model.find("Properties70")
@@ -111,7 +111,7 @@ def main():
                     wanted[p.props[0]] = tuple(p.props[4:7])
         print("  Model %r" % model.props[1])
         for key in ("Lcl Translation", "Lcl Rotation", "Lcl Scaling"):
-            print("    %-16s %s" % (key, wanted[key] if wanted[key] else "(por defecto)"))
+            print("    %-16s %s" % (key, wanted[key] if wanted[key] else "(default)"))
 
     for geo in geometries:
         verts = geo.find("Vertices")
@@ -122,14 +122,14 @@ def main():
         v = verts[0].props[0]
         xs, ys, zs = v[0::3], v[1::3], v[2::3]
         print("  Geometry %r" % geo.props[1])
-        print("    vertices: %d   indices de poligono: %d" % (len(v) // 3, len(polys[0].props[0]) if polys else 0))
+        print("    vertices: %d   polygon indices: %d" % (len(v) // 3, len(polys[0].props[0]) if polys else 0))
         print("    X [%.2f, %.2f]  Y [%.2f, %.2f]  Z [%.2f, %.2f]"
               % (min(xs), max(xs), min(ys), max(ys), min(zs), max(zs)))
         if uvs:
             mapping = [c for c in uvs[0].children if c.name == "MappingInformationType"]
-            print("    UV: si (mapping=%s)" % (mapping[0].props[0] if mapping else "?"))
+            print("    UV: yes (mapping=%s)" % (mapping[0].props[0] if mapping else "?"))
         else:
-            print("    UV: NO -> el modelo se creara sin canal de textura")
+            print("    UV: NO -> the model will be created without a texture channel")
 
 
 if __name__ == "__main__":

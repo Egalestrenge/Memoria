@@ -1,50 +1,52 @@
-// Personaje del field dibujado en el pase 3D, con el MISMO color que el juego y una pizca de luz.
+// The field character drawn in the 3D pass, with the SAME colour as the game plus a touch of light.
 //
-// #pragma target 3.0 no es opcional: el juego corre en Direct3D 9, donde Unity compila por defecto
-// a shader model 2.0 y este pase no cabe en sus 64 instrucciones. Si falta, el shader viaja en el
-// bundle pero llega con isSupported=false y el personaje deja hasta de proyectar sombra.
+// #pragma target 3.0 is not optional: the game runs on Direct3D 9, where Unity compiles to shader
+// model 2.0 by default and this pass does not fit in its 64 instructions. Without it the shader
+// still travels in the bundle but arrives with isSupported=false, and the character stops even
+// casting a shadow.
 //
-// La aritmetica de color esta copiada de PSX/FieldMapActor (StreamingAssets/Shaders/PSX), leida
-// del ensamblador d3d9 que trae el juego:
+// The colour arithmetic is copied from PSX/FieldMapActor (StreamingAssets/Shaders/PSX), read off
+// the d3d9 assembly shipped with the game:
 //     vertex:    oD0 = color_vertice * _Color
 //     fragment:  r0 = tex2D(_MainTex, uv) * oD0
-//                texkill(r0.a - 0.5)          <- recorte alfa
-//                rgb = 2 * r0.a * r0.rgb      <- modulate2x tipico de PSX, premultiplicado
+//                texkill(r0.a - 0.5)          <- alpha cutout
+//                rgb = 2 * r0.a * r0.rgb      <- the usual PSX modulate2x, premultiplied
 //                Blend One OneMinusSrcAlpha
-// Con _LightInfluence = 0 la salida es identica a la del juego. Subiendolo, el personaje empieza a
-// responder a la direccional, a la ambiental y a las luces puntuales, sin dejar de ser el mismo
-// dibujo plano de siempre.
+// With _LightInfluence = 0 the output is identical to the game's. Raising it, the character starts
+// responding to the directional, to ambient and to point lights, while still being the same flat
+// drawing as always.
 //
-// Diferencias deliberadas con el original: ZWrite On y cola Geometry, porque aqui el personaje
-// comparte z-buffer real con la geometria proxy (modo PLAYER3D only) en vez de la profundidad
-// falsa tipo OT del pase PSX.
+// Deliberate differences from the original: ZWrite On and queue Geometry, because here the
+// character shares a real z-buffer with the proxy geometry (PLAYER3D only mode) instead of the
+// PSX pass's fake OT-style depth.
 Shader "Memoria/FieldActorLit"
 {
     Properties
     {
-        _MainTex ("Textura", 2D) = "white" {}
-        _Color ("Tinte", Color) = (1,1,1,1)
-        _LightInfluence ("Influencia de la luz", Range(0,1)) = 0.35
-        _Wrap ("Suavizado del difuso", Range(0,1)) = 0.6
-        // 15 = escribe RGBA, 0 = no escribe color pero si profundidad. Lo pone el mod: con 0 este
-        // material se convierte en una mascara de profundidad con la silueta exacta del personaje,
-        // recorte alfa incluido, y eso es lo que impide que el catcher le pinte sombras encima
-        // cuando al personaje lo sigue dibujando el juego.
-        _ColorMask ("Mascara de color", Float) = 15
-        // Marca de stencil. En reposo es inerte (Ref 0, Comp Always, Pass Keep). El mod la pone en
-        // Ref 1 / Replace cuando el personaje actua de mascara, y el shadow catcher se salta esos
-        // pixeles. Hace falta stencil y no basta la profundidad: una mesa entre la camara y el
-        // personaje esta legitimamente delante, gana el test de profundidad, y le pintaria su
-        // sombra encima.
+        _MainTex ("Texture", 2D) = "white" {}
+        _Color ("Tint", Color) = (1,1,1,1)
+        _LightInfluence ("Light influence", Range(0,1)) = 0.35
+        _Wrap ("Diffuse wrap", Range(0,1)) = 0.6
+        // 15 = writes RGBA, 0 = writes no colour but does write depth. Set by the mod: with 0 this
+        // material becomes a depth mask with the character's exact silhouette, alpha cutout
+        // included, and that is what stops the catcher painting shadows over them while the
+        // character is still being drawn by the game.
+        _ColorMask ("Colour mask", Float) = 15
+        // Stencil mark. At rest it is inert (Ref 0, Comp Always, Pass Keep). The mod sets it to
+        // Ref 1 / Replace when the character acts as a mask, and the shadow catcher then skips those
+        // pixels. Stencil is needed and depth is not enough: a table between the camera and the
+        // character is legitimately in front, wins the depth test, and would paint its shadow over
+        // them.
         _StencilRef ("Stencil ref", Float) = 0
         _StencilComp ("Stencil comp", Float) = 8
         _StencilOp ("Stencil op", Float) = 0
 
-        // Modo modulacion. Con 1 el shader no dibuja al personaje: emite el FACTOR de iluminacion
-        // y se mezcla multiplicando sobre lo que el juego ya pinto. Asi el personaje conserva su
-        // color exacto y su oclusion contra el fondo -lo sigue dibujando el juego- y aun asi se
-        // oscurece al entrar en sombra. Donde no pasa nada el factor vale 1 y el pixel no cambia.
-        _Modulate ("Modular en vez de dibujar", Float) = 0
+        // Modulation mode. With 1 the shader does not draw the character: it emits the lighting
+        // FACTOR and blends by multiplying over what the game already painted. That way the
+        // character keeps their exact colour and their occlusion against the background -the game
+        // still draws them- and yet darkens on entering shadow. Where nothing happens the factor is
+        // 1 and the pixel is unchanged.
+        _Modulate ("Modulate instead of drawing", Float) = 0
         _SrcBlend ("Src blend", Float) = 1
         _DstBlend ("Dst blend", Float) = 10
     }
@@ -104,20 +106,20 @@ Shader "Memoria/FieldActorLit"
                 fixed3 psx = 2.0 * c.a * c.rgb;
 
                 float3 n = normalize(i.normal);
-                // Difuso envolvente: un NdotL crudo deja la espalda a negro, que no pega con el
-                // sombreado plano de los modelos del field.
+                // Wrapped diffuse: a raw NdotL leaves the back pitch black, which does not suit the
+                // flat shading of the field models.
                 float ndl = saturate((dot(n, _WorldSpaceLightPos0.xyz) + _Wrap) / (1.0 + _Wrap));
                 fixed atten = LIGHT_ATTENUATION(i);
                 fixed3 lit = ShadeSH9(float4(n, 1)) + _LightColor0.rgb * ndl * atten;
 
-                // 1 = como en el juego. Ajusta AMBIENT y la intensidad de la direccional para que
-                // "lit" valga aproximadamente 1 en una zona bien iluminada; asi la influencia de la
-                // luz solo se nota al entrar en sombra o al acercarse a una luz.
+                // 1 = as in the game. Tune AMBIENT and the directional intensity so that "lit" is
+                // roughly 1 in a well-lit area; then the light influence is only noticeable on
+                // entering shadow or walking up to a light.
                 fixed3 factor = lerp(fixed3(1,1,1), lit, _LightInfluence);
 
-                // Modulando, la salida es el factor y la mezcla lo multiplica por lo que el juego
-                // pinto. Con factor 1 el pixel queda intacto, que es la garantia de no degradar
-                // el color: no depende de afinar ningun valor.
+                // When modulating, the output is the factor and the blend multiplies it by what
+                // the game painted. With a factor of 1 the pixel is untouched, which is the
+                // guarantee that colour is never degraded: it does not depend on tuning anything.
                 if (_Modulate > 0.5)
                     return fixed4(factor, 1.0);
                 return fixed4(psx * factor, c.a);
@@ -125,8 +127,8 @@ Shader "Memoria/FieldActorLit"
             ENDCG
         }
 
-        // Luces puntuales: lo que tine al personaje cuando pasa junto a una antorcha. Solo suma,
-        // asi que con _LightInfluence a 0 no aporta nada.
+        // Point lights: what tints the character when they walk past a torch. It only adds, so
+        // with _LightInfluence at 0 it contributes nothing.
         Pass
         {
             Tags { "LightMode"="ForwardAdd" }
@@ -188,8 +190,8 @@ Shader "Memoria/FieldActorLit"
             ENDCG
         }
 
-        // La silueta que se proyecta. Repite el recorte alfa: sin el, las capas, el pelo y las
-        // cintas -que son quads con textura calada- proyectarian rectangulos.
+        // The silhouette that gets cast. It repeats the alpha cutout: without it capes, hair and
+        // ribbons -which are quads with a cut-out texture- would cast rectangles.
         Pass
         {
             Tags { "LightMode"="ShadowCaster" }
@@ -231,13 +233,13 @@ Shader "Memoria/FieldActorLit"
         }
     }
 
-    // Plan B, por si el SubShader de arriba no compila en esta plataforma. Reproduce el color del
-    // juego y nada mas: sin direccional, sin ambiental y sin luces puntuales, pero con el recorte
-    // alfa y su pase de sombra, que es lo que hace falta para que el personaje se vea correcto y
-    // proyecte una silueta correcta. Unity se queda con el primer SubShader que soporte, asi que
-    // si el de arriba se cae no se pierde el modo "only" entero: solo se pierde la luz.
+    // Fallback in case the SubShader above does not compile on this platform. It reproduces the
+    // game's colour and nothing else: no directional, no ambient and no point lights, but with the
+    // alpha cutout and its shadow pass, which is what is needed for the character to look right and
+    // cast a correct silhouette. Unity keeps the first SubShader it supports, so if the one above
+    // falls over the whole "only" mode is not lost: only the lighting is.
     //
-    // Cabe de sobra en shader model 2.0: cinco instrucciones y una textura.
+    // It fits comfortably in shader model 2.0: five instructions and one texture.
     SubShader
     {
         Tags { "RenderType"="Opaque" "Queue"="Geometry" "IgnoreProjector"="True" }
@@ -280,8 +282,8 @@ Shader "Memoria/FieldActorLit"
             {
                 fixed4 c = tex2D(_MainTex, i.uv) * i.color;
                 clip(c.a - 0.5);
-                // Este SubShader no calcula luz, asi que modular es no tocar nada: factor 1. Mas
-                // vale eso que dibujar el personaje encima del que ya pinto el juego.
+                // This SubShader computes no lighting, so modulating means touching nothing:
+                // factor 1. Better that than drawing the character over the one the game painted.
                 if (_Modulate > 0.5)
                     return fixed4(1.0, 1.0, 1.0, 1.0);
                 return fixed4(2.0 * c.a * c.rgb, c.a);

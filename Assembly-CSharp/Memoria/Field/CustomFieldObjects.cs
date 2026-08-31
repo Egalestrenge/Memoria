@@ -29,10 +29,10 @@ namespace Memoria.Field
     {
         public const String ConfigFileName = "MemoriaFieldObjects.txt";
 
-        // La raiz del juego gana sobre las carpetas de mod a proposito. El fichero se relee al
-        // cargar cada mapa, asi que dejar una copia suelta en la raiz es la forma de ajustar
-        // posiciones y luces sin tocar el mod ni reinstalarlo: se edita, se sale del mapa y se
-        // vuelve a entrar. Si no hay ninguna, se usa la que trae el mod.
+        // The game root deliberately wins over the mod folders. The file is re-read on every map
+        // load, so dropping a loose copy in the root is how positions and lights get tuned without
+        // touching the mod or reinstalling it: edit it, leave the map, walk back in. When there is
+        // none, the copy shipped inside the mod is used.
         private static String ResolveConfigPath()
         {
             if (File.Exists(ConfigFileName))
@@ -80,13 +80,13 @@ namespace Memoria.Field
         private static String _pendingBundleScene;
         private static FieldPerspectiveCamera.PlayerProxyMode _playerProxyMode;
         /// <summary>
-        /// True entre el cierre de un campo y la entrada al siguiente.
+        /// True between one field shutting down and the next one being entered.
         ///
-        /// El campo no muere en cuanto se llama a su cierre: sigue actualizandose unos frames
-        /// mientras la escena se funde y carga, asi que LateUpdate volvia a pedir el horneado del
-        /// proxy justo despues de haberlo limpiado y lo reconstruia entero sobre un mapa que ya
-        /// no existe. Se veia como proxies "supervivientes" al entrar en el siguiente, que es una
-        /// pista falsa: el cierre si se habia ejecutado.
+        /// A field does not die the moment its shutdown is called: it keeps updating for a few
+        /// frames while the scene fades and loads, so LateUpdate asked for the proxy bake again
+        /// right after it had been cleared and rebuilt the whole thing on a map that no longer
+        /// exists. That showed up as proxies "surviving" into the next field, which is a false
+        /// lead: the shutdown had in fact run.
         /// </summary>
         private static Boolean _fieldClosed;
 
@@ -114,9 +114,9 @@ namespace Memoria.Field
                 _cameraCheckLastTime = 0f;
                 _playerProxyMode = FieldPerspectiveCamera.PlayerProxyMode.Off;
 
-                // Entrar en un mapa tiene que dejar el pase 3D vacio, se haya llegado por donde se
-                // haya llegado: combate, menu, video o volver al mismo sitio. Un proxy que
-                // sobrevive a su mapa es una silueta de mas en la mascara de profundidad.
+                // Entering a map has to leave the 3D pass empty no matter how it was reached:
+                // battle, menu, FMV or coming back to the same place. A proxy that outlives its
+                // map is one silhouette too many in the depth mask.
                 if (FieldPerspectiveCamera.ProxyCount > 0)
                     Log.Warning($"[CustomFieldObjects] {FieldPerspectiveCamera.ProxyCount} proxy(ies) came into this field from the previous one. Dropping them. This does not mean the previous shutdown was skipped: the field keeps updating for a few frames while the scene fades, and anything baked in that window arrives here.");
                 FieldPerspectiveCamera.Cleanup();
@@ -133,8 +133,8 @@ namespace Memoria.Field
                     return;
 
                 Int32 lineNo = 0;
-                // El fichero se relee en cada mapa, asi que el registro de ajustes ya aplicados
-                // se vacia aqui o el aviso de duplicados saltaria a partir del segundo mapa.
+                // The file is re-read on every map, so the record of already-applied settings is
+                // cleared here or the duplicate warning would fire from the second map onwards.
                 _appliedSettings.Clear();
                 FieldPerspectiveCamera.DebugMask = false;
                 FieldPerspectiveCamera.CatcherDebugMode = 0;
@@ -584,7 +584,7 @@ namespace Memoria.Field
                     Log.Message("[CustomFieldObjects] Shadow distance: auto, measured from the camera on every map.");
                     return true;
                 }
-                // Un numero fijo apaga el automatico: manda lo que se escriba aqui.
+                // An explicit number turns the automatic mode off: whatever is written here wins.
                 FieldPerspectiveCamera.AutoShadowDistance = false;
                 if (TryParseSingle(token[1], out Single distance))
                     FieldPerspectiveCamera.SetShadowDistance(distance);
@@ -598,9 +598,9 @@ namespace Memoria.Field
             }
             if (String.Equals(token[0], SceneBundleKeyword, StringComparison.OrdinalIgnoreCase) && token.Length >= 2)
             {
-                // "SCENEBUNDLE auto" carga <fldMapNo>.unity3d en cada mapa donde exista uno. Es lo
-                // que evita tener que anadir una linea por mapa a un fichero que crece con el
-                // juego entero: el nombre del archivo es la configuracion.
+                // "SCENEBUNDLE auto" loads <fldMapNo>.unity3d on every map that has one. This is
+                // what avoids having to add one line per map to a file that would otherwise grow
+                // with the whole game: the file name IS the configuration.
                 if (String.Equals(token[1], "auto", StringComparison.OrdinalIgnoreCase))
                 {
                     _autoBundle = true;
@@ -676,7 +676,7 @@ namespace Memoria.Field
                 Single influence;
                 if (!TryParseSingle(token[1], out influence))
                     return true;
-                // Sin Clamp01: por encima de 1 exagera el efecto, que es justo para lo que esta.
+                // No Clamp01: above 1 it exaggerates the effect, which is exactly what it is for.
                 FieldPerspectiveCamera.CharacterLightInfluence = Mathf.Max(0f, influence);
                 Log.Message($"[CustomFieldObjects] Character light influence: {FieldPerspectiveCamera.CharacterLightInfluence}");
                 return true;

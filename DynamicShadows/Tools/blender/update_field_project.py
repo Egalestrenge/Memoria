@@ -1,17 +1,17 @@
-# Actualiza la camara, el fondo y el walkmesh de un .blend que ya existe, SIN TOCAR lo que hayas
+# Updates the camera, background and walkmesh of an existing .blend, WITHOUT TOUCHING anything you
 # modelado.
 #
-# Es lo que hay que usar cuando el export cambia y ya tienes trabajo hecho: build_field_project.py
-# arranca de una escena vacia y se lo llevaria por delante.
+# This is what to use when the export changes and you already have work in there:
+# build_field_project.py starts from an empty scene and would wipe it out.
 #
 #   blender --background --factory-startup ^
 #     --python tools\blender\update_field_project.py -- <archivo.blend> <carpeta_export>
 #
-# Solo borra y rehace los objetos que genera la propia herramienta (los de OWNED) y la imagen del
-# fondo. Todo lo demas se queda como esta.
+# It only deletes and rebuilds the objects the tool itself generates (those in OWNED) and the
+# background image. Everything else is left as it is.
 #
-# Cierra Blender antes de ejecutarlo: si lo tienes abierto y guardas despues, tu version en memoria
-# sobrescribe esta. Blender deja un .blend1 con la version anterior por si acaso.
+# Close Blender before running it: if it is open and you save afterwards, your in-memory version
+# overwrites this one. Blender leaves a .blend1 with the previous version just in case.
 
 import os
 import sys
@@ -45,8 +45,8 @@ def main():
         removed.append(name)
         bpy.data.objects.remove(obj, do_unlink=True)
 
-    # La imagen se recarga a proposito: el archivo del juego cambia de tamano cuando cambia el
-    # rango de scroll del mapa, y la copia vieja que Blender tiene en memoria seguiria mandando.
+    # The image is deliberately reloaded: the game's file changes size when the map's scroll range
+    # changes, and the stale copy Blender holds in memory would otherwise keep winning.
     for image in list(bpy.data.images):
         if image.name.startswith("background"):
             bpy.data.images.remove(image)
@@ -67,22 +67,22 @@ def main():
 
     print("")
     print("Actualizado %s" % blend_path)
-    print("  rehecho   : %s" % (", ".join(removed) if removed else "nada (no habia)"))
+    print("  rebuilt   : %s" % (", ".join(removed) if removed else "nothing (none present)"))
     print("  intacto   : %d objeto(s)%s" % (len(kept), (" -> " + ", ".join(kept[:12])) if kept else ""))
-    print("  fondo     : background.png cubre %.4fx el encuadre" % bfp.background_scale(data))
+    print("  background: background.png covers %.4fx the frame" % bfp.background_scale(data))
     print("  plano a   : %.2f m" % distance)
 
     check = bfp.verify_projection(data, camera, walkmesh)
     if check:
         count, median_x, median_y, worst_x, worst_y = check
-        print("  camara    : %d vertices del walkmesh, desviacion tipica X %.4f px  Y %.4f px"
+        print("  camera    : %d walkmesh vertices, std deviation X %.4f px  Y %.4f px"
               " (maxima %.2f / %.2f)" % (count, median_x, median_y, worst_x, worst_y))
         if max(median_x, median_y) > 0.5:
-            print("  *** MAL. La camara no reproduce la del juego. ***")
+            print("  *** WRONG. This camera does not reproduce the game's. ***")
 
-    # Lo que apoya en el suelo tiene que tener su Z minima en cero: el walkmesh esta ahi.
+    # Anything resting on the floor must have its minimum Z at zero: that is where the walkmesh is.
     print("")
-    print("  Alturas de tu geometria (el suelo del juego esta en Z = 0):")
+    print("  Heights of your geometry (the game floor is at Z = 0):")
     scale = data["sceneScale"]
     rows = []
     for obj in bpy.data.objects:
@@ -94,7 +94,7 @@ def main():
     for name, low, high in rows:
         note = ""
         if abs(low) > 0.02:
-            note = "   <- %+.0f mm sobre el suelo" % (low * 1000.0)
+            note = "   <- %+.0f mm above the floor" % (low * 1000.0)
         print("    %-22s Z [%7.4f, %7.4f] m   (campo %7.1f)%s" % (name, low, high, low * scale, note))
 
 

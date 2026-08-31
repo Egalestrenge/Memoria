@@ -1,11 +1,11 @@
-# Genera el FBX de prueba para Memoria.
-# Uso:  blender --background --python DynamicShadows/Tools/make_cube_fbx.py -- <ruta_salida.fbx> [semi-tamano]
+# Generates the test FBX for Memoria.
+# Usage:  blender --background --python DynamicShadows/Tools/make_cube_fbx.py -- <out_path.fbx> [half_size]
 #
-# Requisitos del importador de Memoria (ModelImporter.CreateCustomModelFromFbx):
-#   - El objeto debe tener un material asignado; si no, GetMaterialIndex devuelve -1
-#     y CreateCustomModel lanza IndexOutOfRangeException.
-#   - Debe tener UVs para que se cree el canal de textura.
-#   - Las coordenadas se leen en crudo: 1 unidad FBX = 1 unidad de campo de FFIX.
+# What Memoria's importer requires (ModelImporter.CreateCustomModelFromFbx):
+#   - The object must have a material assigned; without one GetMaterialIndex returns -1
+#     and CreateCustomModel throws IndexOutOfRangeException.
+#   - It must have UVs for the texture channel to be created.
+#   - Coordinates are read raw: 1 FBX unit = 1 FFIX field unit.
 
 import sys
 import bpy
@@ -14,13 +14,13 @@ argv = sys.argv[sys.argv.index("--") + 1:]
 out_path = argv[0]
 half = float(argv[1]) if len(argv) > 1 else 50.0
 
-# Escena limpia
+# Clean scene
 bpy.ops.wm.read_factory_settings(use_empty=True)
 
-# Blender escribe la conversion metro->centimetro como "Lcl Scaling = 100" en el nodo Model,
-# y FbxBone.GetLocalToWorldMatrix la hornea en los vertices al importar. Es decir, el modelo
-# acaba 100 veces mas grande en el juego que en Blender: compensamos aqui.
-# Verificado con: python DynamicShadows/Tools/dump_fbx.py <archivo.fbx>
+# Blender writes the metre->centimetre conversion as "Lcl Scaling = 100" on the Model node, and
+# FbxBone.GetLocalToWorldMatrix bakes it into the vertices on import. That is, the model ends up
+# 100 times bigger in the game than in Blender: compensated for here.
+# Verified with: python DynamicShadows/Tools/dump_fbx.py <file.fbx>
 blender_size = (half * 2.0) / 100.0
 
 bpy.ops.mesh.primitive_cube_add(size=blender_size, location=(0.0, 0.0, 0.0))
@@ -28,7 +28,7 @@ cube = bpy.context.active_object
 cube.name = "TestCube"
 cube.data.name = "TestCubeMesh"
 
-# UVs (el cubo primitivo ya trae uno, pero lo forzamos por si acaso)
+# UVs (the primitive cube already has one, but force it just in case)
 if not cube.data.uv_layers:
     bpy.ops.object.mode_set(mode="EDIT")
     bpy.ops.uv.smart_project()
@@ -54,4 +54,4 @@ bpy.ops.export_scene.fbx(
     path_mode="COPY",
 )
 
-print("EXPORTED %s (semi-tamano solicitado: %.2f unidades de campo)" % (out_path, half))
+print("EXPORTED %s (requested half-size: %.2f field units)" % (out_path, half))

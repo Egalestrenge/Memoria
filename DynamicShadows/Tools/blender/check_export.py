@@ -1,6 +1,6 @@
-# Comprueba, sin abrir Blender, si el walkmesh exportado cae dentro del encuadre
-# del fondo usando la camara exportada. Sirve para separar "los datos estan mal"
-# de "el montaje en Blender esta mal".
+# Checks, without opening Blender, whether the exported walkmesh falls inside the
+# background frame using the exported camera. It is there to separate "the data is
+# wrong" from "the Blender setup is wrong".
 #
 #   python DynamicShadows/Tools/blender/check_export.py <carpeta_export>
 
@@ -21,15 +21,15 @@ def read_png_size(path):
 
 
 def invert_rigid(right, up, forward, position):
-    """Inversa de cameraToWorld, cuyas columnas son right/up/forward.
+    """Inverse of cameraToWorld, whose columns are right/up/forward.
 
-    OJO: no es la traspuesta. La base es ortogonal pero NO ortonormal (|up| vale
-    1.0713), y para columnas ortogonales de norma k la inversa es la traspuesta
-    dividida por k^2. Usar la traspuesta a secas mete un error del 7% en Y que
-    ademas se compensa solo si el otro lado de la comparacion comete el mismo,
-    con lo que todo parece cuadrar estando mal.
+    CAREFUL: this is not the transpose. The basis is orthogonal but NOT orthonormal
+    (|up| is 1.0713), and for orthogonal columns of norm k the inverse is the
+    transpose divided by k^2. Using the bare transpose introduces a 7% error in Y
+    that cancels itself out if the other side of the comparison makes the same
+    mistake, so everything appears to line up while being wrong.
     """
-    axes = (right, up, forward)  # columnas de cameraToWorld: M[r][c] = axes[c][r]
+    axes = (right, up, forward)  # columns of cameraToWorld: M[r][c] = axes[c][r]
     inv_rot = [[axes[r][c] / sum(x * x for x in axes[r]) for c in range(3)] for r in range(3)]
     inv_pos = [-sum(inv_rot[r][c] * position[c] for c in range(3)) for r in range(3)]
     return inv_rot, inv_pos
@@ -57,7 +57,7 @@ def main():
     xs, ys, behind = [], [], 0
     for v in vertices:
         cam = [sum(inv_rot[r][c] * v[c] for c in range(3)) + inv_pos[r] for r in range(3)]
-        # worldToCamera de Unity lleva un volteo de Z respecto al transform
+        # Unity's worldToCamera carries a Z flip with respect to the transform
         vx, vy, vz = cam[0], cam[1], -cam[2]
         if vz >= 0.0:
             behind += 1
@@ -67,22 +67,22 @@ def main():
         xs.append((ndc_x * 0.5 + 0.5) * width)
         ys.append((ndc_y * 0.5 + 0.5) * height)
 
-    # Segunda ruta: reproducir lo que monta el script de Blender, para separar
-    # "los datos estan mal" de "el montaje en Blender esta mal".
+    # Second route: reproduce what the Blender script builds, to separate
+    # "the data is wrong" from "the Blender setup is wrong".
     scale = data["sceneScale"]
 
     def S(v):
-        # Misma conversion que build_field_project.unity_to_blender
+        # Same conversion as build_field_project.unity_to_blender
         return (-v[0], -v[2], v[1])
 
     def norm(v):
         return math.sqrt(sum(c * c for c in v))
 
-    # La base exportada es ortogonal pero no ortonormal: |up| = 1.0713, el
-    # estiramiento 320x224 -> 4:3 de PSX que FFIX lleva en la matriz de camara.
-    # Una camara de Blender no puede llevar esa escala, asi que pasa a las
-    # tangentes. El factor es k/kz porque el juego proyecta con la INVERSA de la
-    # base, no con su traspuesta, y con escala no coinciden.
+    # The exported basis is orthogonal but not orthonormal: |up| = 1.0713, the PSX
+    # 320x224 -> 4:3 stretch that FFIX carries in its camera matrix. A Blender camera
+    # cannot carry that scale, so it moves into the tangents. The factor is k/kz
+    # because the game projects with the INVERSE of the basis, not with its transpose,
+    # and with scale present the two are not the same.
     kx, ky, kz = norm(data["right"]), norm(data["up"]), norm(data["forward"])
     btan_x = tan_x * kx / kz
     btan_y = tan_y * ky / kz
@@ -92,7 +92,7 @@ def main():
     yb = S([c / ky for c in data["up"]])
     zb = tuple(-c for c in S([c / kz for c in data["forward"]]))
     pb = tuple(c / scale for c in S(data["position"]))
-    rb = (xb, yb, zb)  # columnas de la matriz de la camara de Blender
+    rb = (xb, yb, zb)  # columns of the Blender camera matrix
 
     shift_x = -data["ndcOffsetX"] / 2.0
     shift_y = -data["ndcOffsetY"] / 2.0 / angular
@@ -114,11 +114,11 @@ def main():
     print("mapa %s (%s)" % (data["map"], data["mapName"]))
     print("  render declarado : %sx%s" % (width, height))
     print("  background.png   : %sx%s" % png if png else "  background.png   : ilegible")
-    print("  vertices         : %s  (detras de la camara: %s)" % (len(vertices), behind))
+    print("  vertices         : %s  (behind the camera: %s)" % (len(vertices), behind))
     if xs:
         print("  walkmesh en px   : X [%.0f, %.0f]   Y [%.0f, %.0f]" % (min(xs), max(xs), min(ys), max(ys)))
         inside = sum(1 for x, y in zip(xs, ys) if 0 <= x <= width and 0 <= y <= height)
-        print("  dentro del cuadro: %s de %s" % (inside, len(xs)))
+        print("  inside the frame : %s of %s" % (inside, len(xs)))
     if bxs:
         print("  via Blender  px  : X [%.0f, %.0f]   Y [%.0f, %.0f]" % (min(bxs), max(bxs), min(bys), max(bys)))
         err = max(max(abs(a - b) for a, b in zip(xs, bxs)), max(abs(a - b) for a, b in zip(ys, bys)))

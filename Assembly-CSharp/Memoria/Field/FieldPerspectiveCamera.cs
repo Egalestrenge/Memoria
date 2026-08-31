@@ -132,7 +132,7 @@ namespace Memoria.Field
             projection[2, 3] = -2f * FarClip * NearClip / (FarClip - NearClip);
             projection[3, 2] = -1f;
 
-            // La escala que se saco de la vista, devuelta aqui.
+            // The scale that was taken out of the view, handed back here.
             projection[0, 0] *= rowScale.x / rowScale.z;
             projection[1, 1] *= rowScale.y / rowScale.z;
             projection[2, 3] /= rowScale.z;
@@ -433,10 +433,10 @@ namespace Memoria.Field
                 return;
             }
 
-            // La raiz primero. Crearla vacia el estado de los proxies -las cinco colecciones van
-            // en paralelo y solo sirven juntas-, asi que pedirla DESPUES de recoger los personajes
-            // borraba el mapa de duenos recien construido en el primer frame de cada mapa: el
-            // tinte no se aplicaba esa vez y el diagnostico no listaba a nadie.
+            // The root first. Creating it clears the proxy state -the five collections run in
+            // parallel and are only useful together- so asking for it AFTER collecting the
+            // characters wiped the owner map that had just been built, on the first frame of every
+            // map: the tint was not applied that time and the diagnostics listed nobody.
             Transform root = GetOrCreateRoot();
             SkinnedMeshRenderer[] sources = CollectFieldCharacters(fieldMap);
             Shader shader = Shader.Find("Standard") ?? Shader.Find("Diffuse");
@@ -481,23 +481,25 @@ namespace Memoria.Field
                 proxy.transform.localRotation = source.transform.rotation;
                 proxy.transform.localScale = Vector3.one;
 
-                // En "shadow" al personaje lo dibuja el juego en el pase PSX, antes que nada de
-                // esto. El catcher, que va despues y sobre un z-buffer recien limpiado, no sabe que
-                // hay alguien delante y le multiplica las sombras encima. La solucion es dibujar el
-                // proxy como mascara de profundidad: misma silueta, con su recorte alfa, sin
-                // escribir un solo pixel de color. El catcher lo encuentra en el z-buffer y no
-                // pinta ahi. Requiere un material que sepa hacerlo; sin el se cae al modo de antes.
-                // Con el personaje dibujado por el juego caben dos papeles para el proxy:
-                //   CHARLIGHT 0  -> mascara pura, no escribe color y el pixel queda intacto
-                //   CHARLIGHT >0 -> ademas modula: multiplica lo que el juego pinto por el factor
-                //                   de iluminacion, con lo que se oscurece en sombra y se tine
-                //                   con las luces cercanas sin dejar de ser el dibujo del juego.
+                // In "shadow" the character is drawn by the game in the PSX pass, before any of
+                // this. The catcher, which runs afterwards over a freshly cleared z-buffer, does not
+                // know somebody is in front and multiplies the shadows on top of them. The fix is to
+                // draw the proxy as a depth mask: same silhouette, same alpha cutout, without
+                // writing a single pixel of colour. The catcher finds it in the z-buffer and does
+                // not paint there. It needs a material that can do this; without one it falls back
+                // to the older mode. With the character drawn by the game, the proxy has two roles:
+                //   CHARLIGHT 0  -> pure mask, writes no colour and the pixel is left untouched
+                //   CHARLIGHT >0 -> it also modulates: multiplies what the game painted by the
+                //                   lighting factor, so the character darkens in shadow and takes
+                //                   the tint of nearby lights while still being the game's own
+                //                   drawing.
                 Boolean depthMask = mode == PlayerProxyMode.ShadowsOnly && CanDepthMask();
-                // Hubo aqui un modo que modulaba los pixeles del personaje mezclando sobre lo que
-                // el juego habia pintado. Se retiro: el proxy multiplica lo que ENCUENTRE en esos
-                // pixeles, y no puede saber si el juego dibujo ahi al personaje o a un NPC que
-                // pasa por delante. Con un moguri delante se veia el fantasma oscuro de Steiner
-                // encima. La luz va ahora por ApplyCharacterTint, sobre el material del juego.
+                // There used to be a mode here that modulated the character pixels by blending
+                // over what the game had painted. It was removed: the proxy multiplies whatever it
+                // FINDS in those pixels, and cannot know whether the game drew the character there
+                // or an NPC walking in front. With a moogle in the way, a dark ghost of Steiner
+                // showed on top of it. Lighting now goes through ApplyCharacterTint, on the game's
+                // own material.
                 Boolean modulate = false;
                 if (_lastReportedMask != depthMask || _lastReportedMode != mode)
                 {
@@ -509,8 +511,8 @@ namespace Memoria.Field
                 proxy.shadowCastingMode = mode == PlayerProxyMode.ShadowsOnly && !depthMask
                     ? UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly
                     : UnityEngine.Rendering.ShadowCastingMode.On;
-                // Modulando, la sombra que recibe ES el efecto: sin esto Unity compila la
-                // variante sin sombras y el personaje nunca se oscurece.
+                // When modulating, the shadow it receives IS the effect: without this Unity
+                // compiles the no-shadow variant and the character never darkens.
                 proxy.receiveShadows = mode != PlayerProxyMode.ShadowsOnly || modulate;
                 // In "Only" the characters leave the PSX pass entirely, which is what makes their
                 // depth comparable with the 3D geometry instead of always losing to it.
@@ -524,9 +526,9 @@ namespace Memoria.Field
             ApplyCharacterTint(sources);
         }
 
-        // Aqui hubo un intento de corregir la escala del proxy con lossy/local. Estaba mal:
-        // BakeMesh aplica la escala DE MUNDO del renderer, no la propia, asi que Vector3.one ya es
-        // correcto siempre y aquello metia el factor dos veces. Tumbo a los dos personajes.
+        // There was an attempt here to correct the proxy scale with lossy/local. It was wrong:
+        // BakeMesh applies the renderer's WORLD scale, not its local one, so Vector3.one is always
+        // already correct and that code applied the factor twice. It flattened both characters.
 
         /// <summary>
         /// Every character on the field, not just the player.
@@ -608,10 +610,10 @@ namespace Memoria.Field
                 if (source == null)
                     continue;
 
-                // Un color por PERSONAJE, no por renderer. Un personaje esta hecho de varios
-                // (cuerpo, brazos, capa) y cada uno tiene su propia transformada: calcular la luz
-                // en la posicion de cada uno hace que a uno le bloquee el rayo y al otro no, y
-                // entonces media figura se oscurece con un borde duro por la costura.
+                // One colour per CHARACTER, not per renderer. A character is made of several
+                // (body, arms, cape) and each has its own transform: computing the light at each
+                // one's position means the ray is blocked for one and not for the next, and then
+                // half the figure darkens with a hard edge along the seam.
                 Transform owner = _characterOwner.TryGetValue(source, out Transform found) ? found : source.transform;
                 if (!_tintByOwner.TryGetValue(owner, out Color tint))
                 {
@@ -707,26 +709,26 @@ namespace Memoria.Field
             }
 
             _tintHadBlocker = anyBlocker;
-            // Se guardan aparte y el llamante decide de quien son: esto corre por cada personaje,
-            // asi que asignarlos aqui deja en el log las cifras del ultimo procesado junto al tinte
-            // del jugador, que no se corresponden y no cuadran entre si.
+            // Stored separately, and the caller decides whose they are: this runs once per
+            // character, so assigning them here leaves the last one processed in the log next to the
+            // player's tint, two figures that do not belong together and do not add up.
             _probeTotal = total;
             _probeReference = reference;
 
             // Dos efectos distintos, con referencias distintas.
             //
-            // Oscurecerse en sombra se mide contra la luz que llegaria sin nada en medio. Es una
-            // fraccion, nunca pasa de 1, y dividir esta bien.
+            // Darkening in shadow is measured against the light that would arrive with nothing in
+            // the way. It is a fraction, never above 1, and dividing is the right thing.
             //
-            // Teñirse junto a una lampara no se puede medir asi. Dividir da un numero sin techo, y
-            // en un mapa alumbrado solo con focos -sin direccional- la referencia se queda en el
-            // ambiente puro: con AMBIENT 0.15 el tinte salia 4.4, el personaje cuatro veces mas
-            // claro que el fondo sobre el que esta pisando. El ambiente no representa lo normal
-            // alli; el fondo ya muestra una sala iluminada.
+            // Taking on the tint of a nearby lamp cannot be measured that way. Dividing gives a
+            // number with no ceiling, and on a map lit only by spotlights -no directional- the
+            // reference collapses to pure ambient: with AMBIENT 0.15 the tint came out at 4.4, the
+            // character four times brighter than the background they are standing on. Ambient does
+            // not represent what is normal there; the background already shows a lit room.
             //
-            // Asi que la aportacion de las lamparas pasa por una funcion que satura: x/(x+ref) va
-            // de 0 a 1 por mucho que suba x, y deja de importar que la referencia sea pequeña. Una
-            // lampara brutal aclara como mucho al doble, no cuatro veces.
+            // So the lamps' contribution goes through a saturating function: x/(x+ref) runs from 0
+            // to 1 however far x climbs, and it stops mattering that the reference is small. A
+            // brutal lamp brightens by at most a factor of two, not four.
             Single gain = CharacterLightInfluence;
             return new Color(
                 Modulate(total.r, reference.r, gain),
@@ -817,13 +819,13 @@ namespace Memoria.Field
             foreach (Transform owner in owners)
                 LogProjectionError(fieldMap, $"actor '{owner.name}'", owner.position);
 
-            // Y ahora lo que de verdad falta: un punto de la MALLA, lejos del origen.
+            // And now what is actually missing: a point on the MESH, away from the origin.
             //
-            // Que el origen de cada actor proyecte exacto no dice nada sobre el resto de su
-            // cuerpo: un error de escala en la proyeccion deja el centro clavado y desplaza todo
-            // lo demas, tanto mas cuanto mas lejos. El centro de las bounds del proxy es un punto
-            // real de la malla, y el juego dibuja esa misma malla, asi que comparar ahi separa
-            // "la proyeccion falla lejos del centro" de "la malla no esta donde el juego la pone".
+            // Each actor's origin projecting exactly says nothing about the rest of their body: a
+            // scale error in the projection leaves the centre pinned and displaces everything else,
+            // the more so the further out. The centre of the proxy bounds is a real point on the
+            // mesh, and the game draws that same mesh, so comparing there separates "the projection
+            // fails away from the centre" from "the mesh is not where the game puts it".
             for (Int32 i = 0; i < _playerProxies.Count; i++)
             {
                 MeshRenderer proxy = _playerProxies[i];
@@ -840,12 +842,12 @@ namespace Memoria.Field
                 Renderer source = entry.Key;
                 if (source == null)
                     continue;
-                // Lo que aplica el juego frente a lo que aplicamos nosotros. El proxy se coloca con
-                // posicion + rotacion y escala uno, dando por hecho que BakeMesh ya metio la
-                // escala de mundo. Con escalas negativas la descomposicion de Unity en rotacion y
-                // lossyScale no tiene por que reconstruir la matriz, y entonces el proxy sale
-                // girado o espejado respecto a lo que dibuja el juego. Esto lo dice con un numero
-                // en vez de dejarlo a la vista.
+                // What the game applies versus what we apply. The proxy is placed with position +
+                // rotation and unit scale, on the assumption that BakeMesh already folded in the
+                // world scale. With negative scales, Unity's decomposition into rotation and
+                // lossyScale is not guaranteed to rebuild the matrix, and then the proxy comes out
+                // rotated or mirrored with respect to what the game draws. This reports it as a
+                // number instead of leaving it to the eye.
                 Matrix4x4 gameMatrix = source.transform.localToWorldMatrix;
                 Matrix4x4 proxyMatrix = Matrix4x4.TRS(source.transform.position, source.transform.rotation, Vector3.one)
                     * Matrix4x4.Scale(source.transform.lossyScale);
@@ -853,8 +855,8 @@ namespace Memoria.Field
                 for (Int32 row = 0; row < 4; row++)
                     for (Int32 column = 0; column < 4; column++)
                         worst = Mathf.Max(worst, Mathf.Abs(gameMatrix[row, column] - proxyMatrix[row, column]));
-                // 0.02 y no 0.001: una rotacion de 0.001 son 0.06 grados, ruido de coma flotante
-                // que no mueve un pixel. Marcar eso como problema solo despista.
+                // 0.02 and not 0.001: a rotation of 0.001 is 0.06 degrees, floating-point noise
+                // that moves no pixel. Flagging that as a problem only misleads.
                 Log.Message($"[FieldPerspectiveCamera] Proxy '{source.name}' of '{entry.Value?.name}': lossy {source.transform.lossyScale}, matrix mismatch {worst:F4}{(worst > 0.02f ? "  <-- THE PROXY CANNOT REPRODUCE THIS TRANSFORM" : "")}");
             }
         }
@@ -866,9 +868,10 @@ namespace Memoria.Field
 
         public static void LogCharacterTint()
         {
-            // "no choco nada" no es un problema: es lo normal cuando el personaje esta a la vista de
-            // las luces. Decir ahi "faltan colliders" es un falso positivo constante, y quien de
-            // verdad sabe si hay colliders es el cargador de la escena, que ya lo dice una vez.
+            // "hit nothing" is not a problem: it is the normal case when the character is in plain
+            // sight of the lights. Saying "colliders missing" there is a constant false positive,
+            // and the one that really knows whether there are colliders is the scene loader, which
+            // already says so once.
             Log.Message($"[FieldPerspectiveCamera] Character light: arriving {_lastTotal}, reference {_lastReference}, tint {_lastTint} (CHARLIGHT {CharacterLightInfluence}), shadow probe {(_tintHadBlocker ? "blocked" : "clear")}.");
         }
 
@@ -937,8 +940,8 @@ namespace Memoria.Field
             while (_playerProxyMaterials.Count <= index)
                 _playerProxyMaterials.Add(null);
 
-            // Se vuelve a comprobar aqui y no solo al recogerlo: el material puede haber llegado
-            // por otra via, y un shader sin soporte se lleva por delante la sombra del personaje.
+            // Checked again here and not only on collection: the material may have arrived by
+            // another route, and an unsupported shader takes the character's shadow down with it.
             Material template = CharacterMaterial;
             if (template != null && (template.shader == null || !template.shader.isSupported))
                 template = null;
@@ -982,10 +985,10 @@ namespace Memoria.Field
                     materials[j].SetFloat(LightInfluencePropertyId, CharacterLightInfluence);
                 if (materials[j].HasProperty(ColorMaskPropertyId))
                 {
-                    // Modulando si escribe color: su color ES el factor por el que se multiplica
-                    // lo que el juego pinto.
+                    // When modulating it does write colour: its colour IS the factor the game's
+                    // painted pixels are multiplied by.
                     materials[j].SetFloat(ColorMaskPropertyId, depthMask && !modulate && !DebugMask ? 0f : 15f);
-                    // -1 devuelve la cola que declara el shader.
+                    // -1 restores the queue the shader itself declares.
                     materials[j].renderQueue = depthMask ? DepthMaskQueue : -1;
                 }
                 if (DebugMask && depthMask && materials[j].HasProperty(ColorPropertyId))
@@ -993,8 +996,8 @@ namespace Memoria.Field
                 if (materials[j].HasProperty(ModulatePropertyId))
                 {
                     materials[j].SetFloat(ModulatePropertyId, modulate ? 1f : 0f);
-                    // Blend DstColor Zero = multiplicar el destino. Sin modular, la mezcla
-                    // premultiplicada de siempre.
+                    // Blend DstColor Zero = multiply the destination. Without modulation, the
+                    // usual premultiplied blend.
                     Boolean multiply = modulate && !DebugMask;
                     materials[j].SetFloat(SrcBlendPropertyId, multiply ? (Single)UnityEngine.Rendering.BlendMode.DstColor : (Single)UnityEngine.Rendering.BlendMode.One);
                     materials[j].SetFloat(DstBlendPropertyId, multiply ? (Single)UnityEngine.Rendering.BlendMode.Zero
@@ -1002,8 +1005,8 @@ namespace Memoria.Field
                 }
                 if (materials[j].HasProperty(StencilRefPropertyId))
                 {
-                    // El descarte por stencil se retiro: recortaba sin mirar profundidad y mordia
-                    // la sombra del propio personaje. Las propiedades se quedan inertes.
+                    // Stencil discard was removed: it cut without looking at depth and bit into
+                    // the character's own shadow. The properties are left inert.
                     materials[j].SetFloat(StencilRefPropertyId, 0f);
                     materials[j].SetFloat(StencilCompPropertyId, StencilAlways);
                     materials[j].SetFloat(StencilOpPropertyId, StencilKeep);
@@ -1021,13 +1024,12 @@ namespace Memoria.Field
             if (fieldMap?.player == null)
                 return;
 
-            // Cada proxy contra SU renderer, no contra el del jugador.
+            // Each proxy against ITS renderer, not against the player's.
             //
-            // Los proxies dejaron de ser solo del jugador y pasaron a cubrir a todos los actores,
-            // pero esto seguia comparando el proxy i con el renderer i del jugador. En un mapa con
-            // varios personajes eso enfrenta objetos que no tienen nada que ver y reporta errores
-            // de mil unidades sobre un sistema que esta bien: exactamente la clase de falso
-            // positivo que cuesta una tarde perseguir.
+            // Proxies stopped being player-only and grew to cover every actor, but this kept
+            // comparing proxy i with the player's renderer i. On a map with several characters that
+            // pits unrelated objects against each other and reports errors of a thousand units on a
+            // system that is fine: exactly the kind of false positive that costs an afternoon.
             Int32 index = 0;
             foreach (KeyValuePair<Renderer, Transform> entry in _characterOwner)
             {

@@ -51,7 +51,7 @@ namespace Memoria.Field
             _exportedCameras.Clear();
         }
 
-        /// <summary>Frames que el viewport tiene que estar quieto antes de exportar. Ver Update.</summary>
+        /// <summary>Frames the viewport must hold still before exporting. See Update.</summary>
         private const Int32 ViewportSettleFrames = 3;
 
         private static Rect _lastPixelRect;
@@ -64,13 +64,13 @@ namespace Memoria.Field
             if (fieldMap.scene == null || _exportedCameras.Contains(fieldMap.camIdx))
                 return;
 
-            // Esperar a que el viewport deje de moverse.
+            // Wait for the viewport to stop moving.
             //
-            // El juego estrecha el viewport del field un frame o dos despues de entrar, y de el
-            // salen el tamano del fondo y el campo de vision que se escriben en el JSON. Exportando
-            // en el primer frame se capturaba a pantalla completa: en el mapa 150, 1920x1080 y
-            // fovX 47.83 en vez de 1765x1080 y 44.36. El proyecto de Blender salia entonces con una
-            // camara que no es la del juego, y nada en el aviso decia que el fondo estuviera mal.
+            // The game narrows the field viewport a frame or two after entering, and the background
+            // size and the field of view written to the JSON both come from it. Exporting on the
+            // first frame captured full screen instead: on map 150, 1920x1080 and fovX 47.83
+            // instead of 1765x1080 and 44.36. The Blender project then came out with a camera that
+            // is not the game's, and nothing in the log said the background was wrong.
             Rect pixelRect = fieldMap.mainCamera.pixelRect;
             if (pixelRect.width != _lastPixelRect.width || pixelRect.height != _lastPixelRect.height
                 || pixelRect.x != _lastPixelRect.x || pixelRect.y != _lastPixelRect.y)
@@ -95,11 +95,11 @@ namespace Memoria.Field
                 String directory = Path.Combine(OutputDirectory, mapNo.ToString(CultureInfo.InvariantCulture));
                 Directory.CreateDirectory(directory);
 
-                // La camara 0 conserva los nombres sin sufijo: es la que ya usan los proyectos
-                // hechos y las herramientas, y no hay razon para romperlos.
+                // Camera 0 keeps the unsuffixed names: it is the one the existing projects and
+                // tools already use, and there is no reason to break them.
                 String suffix = fieldMap.camIdx == 0 ? String.Empty : $"_cam{fieldMap.camIdx}";
                 Single backgroundScale = ExportBackground(fieldMap, Path.Combine(directory, $"background{suffix}.png"));
-                // El walkmesh es del field, no de la camara, asi que se escribe una sola vez.
+                // The walkmesh belongs to the field, not to the camera, so it is written once.
                 if (fieldMap.camIdx == 0 || !File.Exists(Path.Combine(directory, "walkmesh.obj")))
                     ExportWalkmesh(fieldMap, Path.Combine(directory, "walkmesh.obj"));
                 ExportCamera(fieldMap, worldToCamera, projection, Path.Combine(directory, $"field{suffix}.json"), mapNo, backgroundScale);
@@ -185,15 +185,15 @@ namespace Memoria.Field
             Single previousAspect = camera.aspect;
             Rect previousRect = camera.rect;
 
-            // Camera.aspect se deriva solo del viewport HASTA QUE se le asigna; a partir de ahi
-            // queda clavado. Asi que devolverlo con "camera.aspect = previousAspect" no restaura
-            // nada: convierte en manual algo que era automatico, con el valor que tuviera en ese
-            // instante. Y el instante importa, porque el juego estrecha el viewport del field un
-            // frame despues de entrar: la primera visita a un mapa exporta con el viewport ya
-            // estrecho y clava el valor bueno de casualidad; al volver, exporta un frame antes,
-            // con la pantalla entera, y clava 16:9 para siempre. El campo se dibuja entonces con
-            // una escala horizontal que no es la de su viewport, y el proxy del personaje deja de
-            // casar con lo que pinta el juego. Solo fallaba la segunda vez.
+            // Camera.aspect derives itself from the viewport UNTIL it is assigned; from then on it
+            // is pinned. So handing it back with "camera.aspect = previousAspect" restores nothing:
+            // it turns something automatic into something manual, holding whatever value it had at
+            // that instant. And the instant matters, because the game narrows the field viewport a
+            // frame after entering: the first visit to a map exports with the viewport already
+            // narrow and pins the right value by luck; coming back, it exports one frame earlier,
+            // full screen, and pins 16:9 forever. The field is then drawn with a horizontal scale
+            // that is not its viewport's, and the character proxy stops lining up with what the
+            // game paints. It only ever failed the second time.
             Rect previousPixel = camera.pixelRect;
             Single derivedAspect = previousPixel.height > 0f ? previousPixel.width / previousPixel.height : 0f;
             Boolean aspectWasAutomatic = derivedAspect > 0f
@@ -218,8 +218,8 @@ namespace Memoria.Field
             {
                 camera.rect = previousRect;
                 camera.orthographicSize = previousSize;
-                // Ver la nota de arriba: si venia derivandose solo, hay que devolverlo a eso y no
-                // a un numero, o se queda fijo con el aspecto que hubiera al exportar.
+                // See the note above: if it was deriving itself, it has to go back to that and not
+                // to a number, or it stays pinned to whatever aspect was current at export time.
                 if (aspectWasAutomatic)
                     camera.ResetAspect();
                 else
@@ -289,8 +289,8 @@ namespace Memoria.Field
             json.AppendLine($"  \"renderHeight\": {Mathf.RoundToInt(rect.height)},");
             json.AppendLine($"  \"fovXRadians\": {N(fovX, "F6")},");
             json.AppendLine($"  \"fovYRadians\": {N(fovY, "F6")},");
-            // background.png cubre este multiplo del encuadre, centrado en el. Un consumidor lo
-            // coloca escalando por este factor, sin desplazamiento.
+            // background.png covers this multiple of the frame, centred on it. A consumer places
+            // it by scaling with this factor, with no offset.
             json.AppendLine($"  \"backgroundScale\": {N(backgroundScale, "F6")},");
             json.AppendLine($"  \"ndcOffsetX\": {N(-projection[0, 2], "F6")},");
             json.AppendLine($"  \"ndcOffsetY\": {N(-projection[1, 2], "F6")},");

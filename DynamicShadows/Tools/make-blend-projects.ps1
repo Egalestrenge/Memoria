@@ -1,11 +1,11 @@
-# Genera el proyecto de Blender de todos los mapas volcados por EXPORTSCENE que aun no lo tengan.
+# Generates the Blender project for every map dumped by EXPORTSCENE that does not have one yet.
 #
-#   .\tools\make-blend-projects.ps1
-#   .\tools\make-blend-projects.ps1 -Map 153        # solo uno, aunque ya exista
+#   .\DynamicShadows\Tools\make-blend-projects.ps1
+#   .\DynamicShadows\Tools\make-blend-projects.ps1 -Map 153   # just one, even if it exists
 #
-# Los que ya tienen .blend se saltan: pueden llevar modelado dentro y el generador arranca de una
-# escena vacia. Para refrescar la camara o el fondo de uno sin perder el trabajo esta
-# update_field_project.py, que rehace solo lo suyo.
+# Maps that already have a .blend are skipped: they may hold modelling work and the generator starts
+# from an empty scene. To refresh the camera or the background of one without losing that work there
+# is update_field_project.py, which redoes only its own part.
 
 param(
     [string] $GamePath = 'C:\Program Files (x86)\Steam\steamapps\common\FINAL FANTASY IX',
@@ -18,22 +18,22 @@ $ErrorActionPreference = 'Stop'
 $script = Join-Path $PSScriptRoot 'blender\build_field_project.py'
 $export = Join-Path $GamePath 'MemoriaSceneExport'
 
-if (-not (Test-Path $Blender)) { throw "No encuentro Blender en: $Blender" }
-if (-not (Test-Path $export))  { throw "No hay nada volcado en: $export  (activa EXPORTSCENE y entra a un mapa)" }
+if (-not (Test-Path $Blender)) { throw "Cannot find Blender at: $Blender" }
+if (-not (Test-Path $export))  { throw "Nothing dumped in: $export  (enable EXPORTSCENE and enter a map)" }
 
 $target = if ($Map) { Join-Path $export $Map } else { $export }
-if (-not (Test-Path $target)) { throw "No existe: $target" }
+if (-not (Test-Path $target)) { throw "Does not exist: $target" }
 
-Write-Host "== Generando proyectos de Blender ==" -ForegroundColor Cyan
-# Sin "2>&1": PowerShell 5.1 envuelve cada linea de stderr de un ejecutable nativo en un
-# ErrorRecord y da el comando por fallido aunque haya terminado con codigo 0. Blender manda por
-# stderr sus avisos de deprecacion, asi que redirigirlo convierte un aviso inofensivo en un error.
+Write-Host "== Generating Blender projects ==" -ForegroundColor Cyan
+# No "2>&1": PowerShell 5.1 wraps every stderr line of a native executable in an ErrorRecord and
+# treats the command as failed even when it exited with code 0. Blender sends its deprecation
+# warnings to stderr, so redirecting turns a harmless warning into an error.
 & $Blender --background --factory-startup --python $script -- $target |
     Select-String -Pattern '^mapa |^Mapa |guardado en|desviacion maxima|\*\*\*' |
     ForEach-Object { $_.Line }
 
-if ($LASTEXITCODE -ne 0) { throw "Blender termino con codigo $LASTEXITCODE" }
+if ($LASTEXITCODE -ne 0) { throw "Blender exited with code $LASTEXITCODE" }
 
 Write-Host ""
-Write-Host "Listo. Los .blend estan junto a su field.json, en $export\<mapa>\" -ForegroundColor Green
-Write-Host "Si alguna desviacion pasa de 1 px, esa camara no reproduce la del juego: avisa."
+Write-Host "Done. The .blend files sit next to their field.json, in $export\<map>\" -ForegroundColor Green
+Write-Host "If any deviation goes above 1 px, that camera does not reproduce the game's: say so."
