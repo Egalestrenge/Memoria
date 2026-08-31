@@ -1,0 +1,7 @@
+# Mod de pruebas: registra modelos propios en la base de datos GEO de FFIX.
+# Formato:  3DModel <geoId> <NOMBRE_GEO>
+# El geoId debe estar libre: el juego llega hasta 5511 (FF9BattleDB.GEO.cs).
+# El nombre debe seguir el patron GEO_<tipo>_<version>_<codigo>; <tipo> decide
+# la subcarpeta numerica (acc=1, main=2, mon=3, npc=4, sub=5).
+# El FBX va en: StreamingAssets/Assets/Resources/Models/4/9000/9000.fbx
+3DModel 9000 GEO_NPC_F0_CUB

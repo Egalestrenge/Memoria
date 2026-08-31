@@ -426,6 +426,10 @@
     <Compile Include="Memoria\Data\TetraMaster\TripleTriad.cs" />
     <Compile Include="Memoria\Data\TetraMaster\TripleTriadCard.cs" />
     <Compile Include="Memoria\Data\TetraMaster\TetraMasterCardId.cs" />
+    <Compile Include="Memoria\Field\CustomFieldObjects.cs" />
+    <Compile Include="Memoria\Field\FieldPerspectiveCamera.cs" />
+    <Compile Include="Memoria\Field\FieldSceneBundle.cs" />
+    <Compile Include="Memoria\Field\FieldSceneExport.cs" />
     <Compile Include="Memoria\Field\FieldCalculator.cs" />
     <Compile Include="Memoria\Scenes\BattleHUD\BattleUIControlPanel.cs" />
     <Compile Include="Memoria\Scenes\ControlPanel\ControlHelp.cs" />

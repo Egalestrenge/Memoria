@@ -1,0 +1,127 @@
+# Objetos personalizados por mapa. Se relee al cargar cada field: para probar
+# posiciones basta con salir del mapa y volver a entrar, sin recompilar.
+#
+# Formato:  <fldMapNo> <modelo> <x> <y> <z> [escala] [LIT]
+#   LIT      lo dibuja la camara en perspectiva derivada, con shader Standard,
+#            luz real y sombras. Sin LIT usa la proyeccion PSX del juego.
+#   Modelos: GEO_NPC_F0_CUB (nuestro FBX, 100 unidades con escala 1)
+#            PRIMITIVE_CUBE / PRIMITIVE_PLANE (primitivos de Unity)
+#   '@' delante de la X: coordenadas relativas a bgi.charPos (ojo, no es el
+#   punto de entrada; en el mapa 150 vale (-1423,0,1347) y se anda en Z 23..430)
+#
+# Ajustes globales:
+#   SCENESCALE <factor>                             unidades de campo por unidad de escena
+#       El juego trabaja a ~340 unidades por metro (Steiner mide unas 593), lo
+#       que rompe todos los ajustes de Unity que van "por unidad": resolucion de
+#       lightmap, distancia de sombras, tamano de particulas, LOD. Modelando en
+#       metros y escalando aqui, esos valores por defecto vuelven a servir.
+#       Solo afecta al contenido de SCENEBUNDLE; los objetos LIT y el proxy del
+#       jugador siguen en coordenadas de campo.
+#   SCENEBUNDLE auto                                una escena por mapa, por convencion
+#       Carga <fldMapNo>.unity3d en cada mapa donde exista. El nombre del archivo
+#       ES la configuracion, asi que anadir un mapa es soltar su bundle en la
+#       carpeta del mod: nada que tocar aqui. Si no hay bundle, el mapa se juega
+#       normal y el log lo dice.
+#   SCENEBUNDLE <mapa> <archivo> [escena]           una escena concreta, para excepciones
+#       El bundle se busca en la raiz del juego y en cada carpeta de mod activa.
+#       Sin nombre de escena se usa la primera del bundle.
+#       Trae sus lightmaps y light probes; sus luces se limitan a la capa 3D y
+#       se le quitan las camaras que traiga.
+#   AMBIENT <r> <g> <b> [intensidad]                luz ambiental (0-1 por canal)
+#       Con el escenario horneado en Blender, la ambiental sostiene el albedo y
+#       la direccional se baja: esta solo para el personaje y su sombra.
+#       El tinte del mapa sale en el DUMP del jugador, en su material _Color.
+#   LIGHT <eulerX> <eulerY> <eulerZ> [intensidad]   luz direccional del pase 3D
+#   SHADOWDISTANCE auto | <unidades>                hasta donde hay sombras
+#       "auto" la mide en cada mapa: el doble de la distancia de la camara a lo mas
+#       lejano que tenga que proyectar. Un numero fijo no puede valer para todos,
+#       porque la camara esta a 3000 unidades del jugador en un mapa y a 6400 en
+#       otro, y lo que queda fuera del limite simplemente no proyecta -sin avisar,
+#       con la geometria, las luces y el shader perfectos-.
+#   PLAYER3D off|shadow|full|only                   mete al personaje en el pase 3D
+#       shadow: se sigue dibujando con PSX pero proyecta sombra real
+#       full:   ademas se redibuja en el pase 3D (se vera duplicado sobre el PSX)
+#       only:   se apaga el render PSX del personaje y solo queda el del pase 3D,
+#               con lo que comparte z-buffer real con la geometria 3D
+#   CHARLIGHT <ganancia>                            cuanta luz reciben los personajes
+#       Se aplica tinendo el material con el que el juego ya los dibuja: su shader
+#       calcula tex * (colorVertice * _Color), asi que multiplicar _Color es el
+#       mando que ya entiende. Conservan sus colores, su recorte alfa y su orden
+#       contra todo lo demas, y solo se oscurecen o toman el tono de una luz
+#       cercana. Es un color por personaje, no por pixel; para los modelos planos
+#       de FFIX esa es la resolucion correcta.
+#       Es una ganancia sobre la DESVIACION respecto a lo normal, y no tiene tope:
+#       0 los deja identicos al juego, 1 aplica la luz tal cual la calcula la escena,
+#       y por encima de 1 la exagera. Ese es el unico mando: las luces se quedan
+#       como esten en la escena de Unity, y esto decide cuanto llegan al personaje.
+#       Oscurecerse en sombra necesita COLLIDERS en la geometria de la escena: la
+#       sombra se resuelve con un raycast porque el shadow map no se puede
+#       consultar desde script. El log avisa si no los hay.
+#       Las luces puntuales tinen sin necesidad de colliders.
+#
+# Palabras clave de diagnostico:
+#   MASKDEBUG [on|off]  pinta de verde el proxy del personaje, encima del render
+#           del juego. Sirve para separar dos fallos que en pantalla se ven igual:
+#           si el verde se sale de su silueta, la mascara no casa; si encaja
+#           exactamente, la mascara esta bien y el problema es la sombra.
+#   SHADOWBIAS <bias> [normalBias]  sesgo de sombra de las luces del pase 3D.
+#           Unity lo expresa relativo al texel del shadow map, asi que crece con
+#           SHADOWDISTANCE: a las distancias que pide un field, el valor por
+#           defecto (0.05 / 0.4) se vuelve enorme en unidades de mundo y la
+#           sombra se despega de los pies. Prueba 0.01 0.1.
+#   TRACE   posicion del jugador en Memoria.log mientras andas
+#   DUMP    renderers y materiales de lo spawneado y del jugador
+#   CAMERA  compara la proyeccion PSX con la de la camara derivada
+#   PROBE   shaders y capacidades de sombra disponibles en el build
+#
+# EXPORTSCENE  vuelca el mapa actual en MemoriaSceneExport/<mapa>/ con la camara
+#              (field.json), el fondo limpio (background.png) y la malla de
+#              colision (walkmesh.obj). Luego, para montar el proyecto Blender:
+#                blender --background --factory-startup ^
+#                  --python tools/blender/build_field_project.py -- ^
+#                  "<ruta del juego>/MemoriaSceneExport/150"
+#
+# Eje Y: en coordenadas de campo +Y es ARRIBA (lo confirma charAimHeight, que se
+# suma para elevar el punto de mira, y el TRACE subiendo escaleras). Con Y=0 el
+# objeto queda centrado en el suelo; sube el valor para levantarlo.
+#
+# Cast. Alex./Guardia = mapa 150
+
+TRACE
+CAMERA
+EXPORTSCENE
+SHADOWDISTANCE auto
+AMBIENT 0.15 0.15 0.13 1.0
+
+# Con SCENEBUNDLE la direccional la trae la escena, y el cargador le limita el
+# cullingMask a la capa 3D, asi que tambien ilumina al personaje. Dejar LIGHT
+# activo aqui pondria una segunda direccional encima. Solo se usa sin bundle.
+# LIGHT 50 -30 0 0.6
+# Prueba del shadow catcher: el personaje lo sigue dibujando el juego con su render PSX de
+# siempre, y lo unico que aporta el pase 3D es su silueta en el shadow map. Asi el fondo y el
+# personaje quedan intactos y lo unico nuevo en pantalla es la sombra.
+PLAYER3D shadow
+
+# El unico mando de iluminacion de personajes. En zona normal no cambia nada valga lo que valga;
+# solo amplifica las desviaciones: entrar en sombra, o acercarse a una llama. Sube o baja este
+# numero y ya esta. Las luces se quedan como esten en la escena.
+CHARLIGHT 2.7
+# Hito 3, cuando la sombra ya este bien: PLAYER3D only + CHARLIGHT 0 tiene que
+# verse IDENTICO al render del juego.
+# CHARLIGHT 0
+
+# Estos dos los trae ahora el bundle en las mismas coordenadas: si se dejan
+# activos se solapan con los de la escena y no sabrias cual estas viendo.
+# 150 PRIMITIVE_PLANE -700 0 200 120.0 LIT
+# 150 PRIMITIVE_CUBE  -700 80 500 80.0 LIT
+
+# Escena de Unity, modelada en metros. Una posicion de campo P se coloca en
+# Unity en P/345 (el TRACE ya te da las dos cifras).
+#
+# El 345 NO es a ojo: FF9BattleDBHeightAndRadius da la altura de cada modelo,
+# y la de Steiner (GEO_MAIN_F0_STN, id 5489) es 603 unidades de campo.
+#     factor = 603 / altura_en_metros    ->    603 / 1.75 = 345
+# Lo unico opinable es que estatura se le asigna: 1.70 -> 355, 1.80 -> 335.
+SCENESCALE 345
+# Escena de prueba del shadow catcher: solo el suelo del mapa (invisible) y una direccional.
+SCENEBUNDLE auto

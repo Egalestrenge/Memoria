@@ -2,6 +2,7 @@
 using Assets.Sources.Scripts.UI.Common;
 using Global.Sound.SaXAudio;
 using Memoria;
+using Memoria.Field;
 using System;
 using System.Collections;
 using UnityEngine;
@@ -157,6 +158,7 @@ public class HonoluluFieldMain : HonoBehavior
         String camNumberStr = "-" + camNumber;
         if (camNumber == -1) { camNumberStr = ""; };
         PlayerWindow.UpdateTitle();
+        CustomFieldObjects.SpawnIntoField(this.fieldmap);
         FPSManager.DelayMainLoop(Time.realtimeSinceStartup - loadStartTime);
 
         // We use a coroutine here otherwise the game crashes frequently during the autosave for some reason
@@ -195,6 +197,7 @@ public class HonoluluFieldMain : HonoBehavior
                     sceneFromState.Show(null);
             }
             this.FF9FieldLocationMain();
+            CustomFieldObjects.UpdateTrace(this.fieldmap);
             EMinigame.GetTheaterShipMaquetteAchievement();
         }
         catch (Exception err)
@@ -389,6 +392,7 @@ public class HonoluluFieldMain : HonoBehavior
 
     public override void HonoLateUpdate()
     {
+        CustomFieldObjects.LateUpdate(this.fieldmap);
     }
 
     private void ff9fieldInternalLoopEnd()
@@ -420,6 +424,7 @@ public class HonoluluFieldMain : HonoBehavior
 
     private void ff9ShutdownStateFieldMap()
     {
+        CustomFieldObjects.ShutdownField();
         FF9StateFieldMap map = FF9StateSystem.Field.FF9Field.loc.map;
         FF9Snd.ff9fieldsound_stopall_mapsndeffect(this.FF9.fldMapNo);
         switch (map.nextMode)

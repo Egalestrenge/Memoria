@@ -627,3 +627,20 @@ vcpkg_installed/
 
 # VS Code C# Dev Kit
 *.lscache
+
+# ---- Dynamic Shadows -------------------------------------------------------
+# Caché del editor de Unity: se regenera sola al abrir el proyecto.
+/DynamicShadows/Unity/*/Library/
+/DynamicShadows/Unity/*/Temp/
+/DynamicShadows/Unity/*/obj/
+/DynamicShadows/Unity/*/*.csproj
+/DynamicShadows/Unity/*/*.sln
+# Los bundles se construyen desde el menú "Memoria > Build Scene Bundle" y se
+# escriben directamente en DynamicShadows/Mod/DynamicShadows/, que sí se versiona.
+/DynamicShadows/Unity/*/BuiltBundles/
+
+# Memoria hereda "*.meta" de la plantilla de VisualStudio, pero en un proyecto de
+# Unity los .meta son los que guardan los GUID: sin ellos se pierden todas las
+# referencias entre assets. Se reactivan solo dentro del proyecto de Unity.
+!/DynamicShadows/Unity/*/Assets/**/*.meta
+!/DynamicShadows/Unity/*/ProjectSettings/**/*.meta
