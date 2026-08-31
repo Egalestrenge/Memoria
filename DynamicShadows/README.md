@@ -198,8 +198,24 @@ exactly as the game's, the background as camera layers, and the walkmesh in wire
 metres.
 
 It **verifies itself**: it reprojects the walkmesh through the Blender camera and compares against
-the game. Anything above 1 px of deviation is reported. Existing projects are never overwritten —
-use `update_field_project.py` to refresh one without losing your modelling.
+the game. Anything above 1 px of deviation is reported. Existing projects are never overwritten,
+because they may hold modelling work.
+
+> **If you re-export a map, its project goes stale.** The camera, the render resolution and the
+> background image in the `.blend` all come from `field.json`, and that depends on the resolution
+> you were playing at. Play at a different resolution, re-export, and the project no longer matches
+> the game — nothing errors, the viewport just stops lining up. Your modelling is unaffected: the
+> geometry is in metres and stays valid.
+>
+> The script reports any project older than its export and refreshes them with `-Update`, which
+> preserves everything you have modelled:
+>
+> ```powershell
+> .\DynamicShadows\Tools\make-blend-projects.ps1 -Update
+> ```
+>
+> One limitation: on a map with more than one BGCAM, `-Update` only refreshes camera 0 and says so.
+> The other cameras need a rebuild from scratch.
 
 ### 3. Model the scenery
 

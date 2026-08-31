@@ -6,11 +6,19 @@
 # Maps that already have a .blend are skipped: they may hold modelling work and the generator starts
 # from an empty scene. To refresh the camera or the background of one without losing that work there
 # is update_field_project.py, which redoes only its own part.
+#
+# A .blend older than its field.json is STALE: the map was re-exported afterwards, most often
+# because the game was played at a different resolution, and the camera, the render resolution and
+# the background image in the project are the previous ones. Nothing errors, the viewport simply
+# stops matching the game. Those are reported at the end, and -Update refreshes them.
 
 param(
     [string] $GamePath = 'C:\Program Files (x86)\Steam\steamapps\common\FINAL FANTASY IX',
     [string] $Blender  = 'C:\Program Files\Blender Foundation\Blender 5.1\blender.exe',
-    [string] $Map      = ''
+    [string] $Map      = '',
+    # Refresh the projects whose export is newer than their .blend, with update_field_project.py.
+    # Safe on work in progress: it only rebuilds the objects the tool itself generates.
+    [switch] $Update
 )
 
 $ErrorActionPreference = 'Stop'
@@ -30,10 +38,47 @@ Write-Host "== Generating Blender projects ==" -ForegroundColor Cyan
 # warnings to stderr, so redirecting turns a harmless warning into an error.
 & $Blender --background --factory-startup --python $script -- $target |
     Select-String -Pattern '^map |^Map |saved to|median deviation|\*\*\*' |
-    ForEach-Object { $_.Line }
+    ForEach-Object { Write-Host $_.Line }
 
 if ($LASTEXITCODE -ne 0) { throw "Blender exited with code $LASTEXITCODE" }
 
 Write-Host ""
 Write-Host "Done. The .blend files sit next to their field.json, in $export\<map>\" -ForegroundColor Green
 Write-Host "If any deviation goes above 1 px, that camera does not reproduce the game's: say so."
+
+# Projects whose export is newer than the .blend built from it. The generator above skipped
+# them on purpose -they may hold modelling- so without this they would stay silently stale.
+$updater = Join-Path $PSScriptRoot 'blender\update_field_project.py'
+$stale = @()
+foreach ($dir in Get-ChildItem $target -Directory -ErrorAction SilentlyContinue) {
+    $json = Join-Path $dir.FullName 'field.json'
+    if (-not (Test-Path $json)) { continue }
+    # Every .blend of the map, the _edit ones included: those are usually where the modelling
+    # lives, so skipping them would ignore exactly the files that matter.
+    foreach ($blend in Get-ChildItem $dir.FullName -Filter 'field_*.blend' -ErrorAction SilentlyContinue) {
+        if ((Get-Item $json).LastWriteTime -gt $blend.LastWriteTime) {
+            $stale += [PSCustomObject]@{ Map = $dir.Name; Blend = $blend.FullName; Folder = $dir.FullName }
+        }
+    }
+}
+
+if ($stale.Count -gt 0) {
+    Write-Host ""
+    Write-Host "== $($stale.Count) project(s) older than their export ==" -ForegroundColor Yellow
+    foreach ($x in $stale) { Write-Host "   map $($x.Map): $(Split-Path $x.Blend -Leaf)" }
+    Write-Host "The map was re-exported after the project was built -typically after playing at a"
+    Write-Host "different resolution- so its camera, resolution and background are the old ones."
+    if (-not $Update) {
+        Write-Host "Re-run with -Update to refresh them. Your modelling is preserved." -ForegroundColor Yellow
+    } else {
+        Write-Host ""
+        Write-Host "== Refreshing ==" -ForegroundColor Cyan
+        foreach ($x in $stale) {
+            Write-Host "   map $($x.Map)"
+            & $Blender --background --factory-startup --python $updater -- $x.Blend $x.Folder |
+                Select-String -Pattern 'rebuilt|background|camera|WRONG|\*\*\*' |
+                ForEach-Object { '   ' + $_.Line }
+            if ($LASTEXITCODE -ne 0) { throw "Blender exited with code $LASTEXITCODE on map $($x.Map)" }
+        }
+    }
+}
