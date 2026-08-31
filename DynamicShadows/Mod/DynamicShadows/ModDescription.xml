@@ -4,7 +4,7 @@
 	<InstallationPath>DynamicShadows</InstallationPath>
 	<Version>0.1.0</Version>
 	<ReleaseDate>2026-08-31</ReleaseDate>
-	<Author>manuc</Author>
+	<Author>Egalestrenge</Author>
 	<Category>Graphics</Category>
 	<Description>Real 3D scenery, lighting and dynamic shadows over the field maps of
 	Final Fantasy IX.
@@ -30,5 +30,5 @@
 	<CompatibilityNotes>It replaces Assembly-CSharp.dll, so it is incompatible with any other mod
 	that also replaces that DLL. Mods that only add data (textures, text, music, models) coexist
 	with it without trouble.</CompatibilityNotes>
-	<Website>https://github.com/manuc/Memoria</Website>
+	<Website>https://github.com/Egalestrenge/Memoria</Website>
 </Mod>
