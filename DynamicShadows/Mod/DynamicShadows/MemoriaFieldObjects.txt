@@ -92,6 +92,12 @@ CAMERA
 EXPORTSCENE
 SHADOWDISTANCE auto
 AMBIENT 0.15 0.15 0.13 1.0
+MASKDEBUG off
+# Diagnostico del pase de luces adicionales del catcher.
+#   1 rojo plano, 2 solo la sombra (negro donde la luz esta bloqueada),
+#   3 solo el alcance (negro donde la lampara no llega), 4 el factor final,
+#   off para quitarlo.
+CATCHERDEBUG off
 
 # Con SCENEBUNDLE la direccional la trae la escena, y el cargador le limita el
 # cullingMask a la capa 3D, asi que tambien ilumina al personaje. Dejar LIGHT
@@ -105,7 +111,7 @@ PLAYER3D shadow
 # El unico mando de iluminacion de personajes. En zona normal no cambia nada valga lo que valga;
 # solo amplifica las desviaciones: entrar en sombra, o acercarse a una llama. Sube o baja este
 # numero y ya esta. Las luces se quedan como esten en la escena.
-CHARLIGHT 2.7
+CHARLIGHT 1.0
 # Hito 3, cuando la sombra ya este bien: PLAYER3D only + CHARLIGHT 0 tiene que
 # verse IDENTICO al render del juego.
 # CHARLIGHT 0
@@ -123,5 +129,6 @@ CHARLIGHT 2.7
 #     factor = 603 / altura_en_metros    ->    603 / 1.75 = 345
 # Lo unico opinable es que estatura se le asigna: 1.70 -> 355, 1.80 -> 335.
 SCENESCALE 345
-# Escena de prueba del shadow catcher: solo el suelo del mapa (invisible) y una direccional.
+# Escena de Unity por mapa: <fldMapNo>.unity3d. La iluminacion la decide la escena.
 SCENEBUNDLE auto
+
