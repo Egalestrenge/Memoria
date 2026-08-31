@@ -1,8 +1,52 @@
-# Escenarios 3D en Final Fantasy IX sobre Memoria
+# Dynamic Shadows — escenarios 3D en Final Fantasy IX sobre Memoria
 
 Documento de traspaso. Describe el objetivo, lo que está construido y verificado, el flujo de
 trabajo, y las trampas que ya nos han costado tiempo. Todo lo que aquí se afirma como "verificado"
 se comprobó con números durante el desarrollo, no a ojo.
+
+---
+
+## 0. Cómo está organizado el repo
+
+Este repo **es** el fork de Memoria: el pase 3D no puede ser un mod normal, porque el sistema de
+mods de Memoria carga datos y no código. Así que el motor y el contenido van juntos, pero
+separados en el árbol:
+
+```
+Assembly-CSharp/Memoria/Field/     el código del pase 3D (lo que se compila en el DLL)
+  CustomFieldObjects.cs            configuración por mapa, spawn de objetos, diagnóstico
+  FieldPerspectiveCamera.cs        cámara derivada de BGCAM_DEF, sombras, proxy del personaje
+  FieldSceneBundle.cs              carga del bundle de Unity de cada mapa
+  FieldSceneExport.cs              volcado de un mapa para Blender (EXPORTSCENE)
+
+DynamicShadows/                    todo lo que no es código del motor
+  README.md                        este documento
+  Mod/DynamicShadows/              el mod tal y como se instala en el juego
+  Unity/DynamicShadows/            proyecto de Unity 5.2.3f1 donde se iluminan las escenas
+  Tools/                           build, generadores de Blender y utilidades
+```
+
+Aparte de esos cuatro ficheros, el fork solo toca **9 líneas** de Memoria: cinco *hooks* en
+`Global/Honolulu/HonoluluFieldMain.cs` y cuatro `<Compile Include>` en el `.csproj`. Mantenerlo
+así de pequeño es deliberado: es lo que permite rebasar sobre `upstream/main` sin dolor.
+
+### Instalar
+
+1. `.\DynamicShadows\Tools\build-and-deploy.ps1` (PowerShell **como administrador**: el juego
+   está en Program Files). Compila el DLL, lo copia a `x64\FF9_Data\Managed\` y despliega
+   `Mod/DynamicShadows/` en la raíz del juego.
+2. Activar **Dynamic Shadows** en el Mod Manager del launcher, o añadirlo a mano en
+   `Memoria.ini`, sección `[Mod]`, `FolderNames`. El script avisa si falta.
+
+El mod trae su propio `MemoriaFieldObjects.txt`. Una copia en la raíz del juego tiene prioridad
+sobre la del mod y se relee al cargar cada mapa: es la vía para ajustar posiciones, luces y
+`CHARLIGHT` en caliente sin redesplegar. `-EditConfig` la deja puesta.
+
+> **Lo que impide distribuirlo como un mod normal.** El Mod Manager instala carpetas de datos;
+> no carga ensamblados. El pase 3D vive en `Assembly-CSharp.dll`, así que un release tiene que
+> traer el DLL y es incompatible con cualquier otro mod que también lo reemplace. La salida
+> limpia es que el código acabe *dentro* de Memoria vía PR upstream: entonces este mod pasa a ser
+> solo datos y deja de tener ese conflicto.
 
 ---
 
@@ -23,8 +67,8 @@ Alexandria), pequeño y con un save de Steiner disponible.
 | ------------ | ------------------------------------------------------------------------------ |
 | Juego        | FF9 de Steam, `C:\Program Files (x86)\Steam\steamapps\common\FINAL FANTASY IX` |
 | Motor        | **Unity 5.2.3f1** (según `FileVersion` de `x64\FF9.exe`)                       |
-| Memoria      | clon del repo en `Memoria/`, rama `main`                                       |
-| Unity Editor | 5.2.3f1, proyecto en `Unity/LevelTest/`                                        |
+| Memoria      | este repo: fork de `Albeoris/Memoria`, rama `dynamic-shadows`                   |
+| Unity Editor | 5.2.3f1, proyecto en `DynamicShadows/Unity/DynamicShadows/`                    |
 | Blender      | 5.1 en `C:\Program Files\Blender Foundation\Blender 5.1`                       |
 
 ### Compilación
@@ -33,9 +77,9 @@ Memoria **no es un plugin**: es el propio `Assembly-CSharp.dll` del juego reescr
 ni BepInEx en el repo; los métodos se editan directamente en el fuente decompilado.
 
 ```powershell
-.\tools\build-and-deploy.ps1              # compila y despliega
-.\tools\build-and-deploy.ps1 -ResetConfig # además sobrescribe MemoriaFieldObjects.txt
-.\tools\build-and-deploy.ps1 -SkipBuild   # solo despliega
+.\DynamicShadows\Tools\build-and-deploy.ps1              # compila y despliega
+.\DynamicShadows\Tools\build-and-deploy.ps1 -EditConfig  # además saca la config a la raíz
+.\DynamicShadows\Tools\build-and-deploy.ps1 -SkipBuild   # solo despliega el mod
 ```
 
 Dos particularidades del entorno, ya resueltas dentro del script:
@@ -252,7 +296,7 @@ Alternativa de mucho menos trabajo, y el camino recomendado para empezar: en vez
 fondo, se modela **geometría muy simple** (suelo, paredes, una columna) que **no se dibuja** y solo
 sirve para recibir la sombra del personaje y para dar profundidad real.
 
-Dos shaders en [Unity/LevelTest/Assets/Shaders/](Unity/LevelTest/Assets/Shaders/):
+Dos shaders en [DynamicShadows/Unity/DynamicShadows/Assets/Shaders/](DynamicShadows/Unity/DynamicShadows/Assets/Shaders/):
 
 **`Memoria/ShadowCatcher`** — la geometría proxy. La cámara 3D solo limpia el z-buffer, así que al
 dibujarse el framebuffer ya contiene la placa prerenderizada. El pase de color usa
@@ -281,14 +325,14 @@ textura calada— proyectarían rectángulos.
 
 Un shader **no se puede compilar en runtime** (los 140 subprogramas del juego son ensamblador d3d9
 precompilado), así que ambos viajan dentro del bundle, compilados por el editor 5.2.3. El material
-del personaje se recoge en [FieldSceneBundle.cs](Memoria/Assembly-CSharp/Memoria/Field/FieldSceneBundle.cs)
+del personaje se recoge en [FieldSceneBundle.cs](Assembly-CSharp/Memoria/Field/FieldSceneBundle.cs)
 `Adopt`, buscando cualquier material cuyo shader se llame `Memoria/FieldActorLit`.
 
 El objeto que lo lleve tiene que quedarse **activo con el Mesh Renderer desmarcado**, no al revés:
 el contenido de la escena se localiza recorriendo los objetos raíz con `FindObjectsOfType`, que
 **no devuelve objetos desactivados**, así que un portador desactivado en la raíz no se encontraría
 nunca. Con el renderer desmarcado no dibuja nada y sí se encuentra. De esto se encarga
-[SetupShadowTest.cs](Unity/LevelTest/Assets/Editor/SetupShadowTest.cs).
+[SetupDynamicShadowsScene.cs](DynamicShadows/Unity/DynamicShadows/Assets/Editor/SetupDynamicShadowsScene.cs).
 Si algún shader no sobrevive al empaquetado se avisa en el log en vez de dibujar rosa en silencio.
 
 Orden de trabajo, cada hito comprobable por sí solo:
@@ -450,8 +494,9 @@ Se modela sobre el fondo y el walkmesh reales. Después, en Unity 5.2.3:
 1. Importar el FBX y colocarlo **sin mover** (las posiciones ya son correctas)
 2. Luces, `Lightmap Static` en la geometría, `Baked GI` activo y `Precomputed Realtime GI` desactivado
 3. `Window > Lighting > Build`
-4. `Memoria > Build Scene Bundle` (menú que añade [tools/unity/BuildSceneBundle.cs](tools/unity/BuildSceneBundle.cs))
-5. Copiar el `.unity3d` a `TestScenario/`, desplegar, **reiniciar el juego**
+4. `Dynamic Shadows > Construir bundle` (menú de [BuildSceneBundle.cs](DynamicShadows/Unity/DynamicShadows/Assets/Editor/BuildSceneBundle.cs)),
+   que escribe el `.unity3d` directamente en `DynamicShadows/Mod/DynamicShadows/`
+5. Desplegar y **reiniciar el juego**
 
 ---
 
@@ -549,9 +594,9 @@ Solo se detecta midiendo el viaje completo hasta el juego.
 
 | Herramienta                                                    | Uso                                                                                                                                                |
 | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [tools/blender/check_export.py](tools/blender/check_export.py) | comprueba una exportación **sin abrir Blender**: proyecta el walkmesh por la ruta del juego y por la de Blender y reporta la desviación en píxeles |
-| [tools/dump_fbx.py](tools/dump_fbx.py)                         | valida un FBX contra lo que exige el importador de Memoria (material obligatorio, UVs, `Lcl Scaling`)                                              |
-| [tools/make_cube_fbx.py](tools/make_cube_fbx.py)               | genera un FBX de prueba con Blender headless                                                                                                       |
+| [check_export.py](DynamicShadows/Tools/blender/check_export.py) | comprueba una exportación **sin abrir Blender**: proyecta el walkmesh por la ruta del juego y por la de Blender y reporta la desviación en píxeles |
+| [dump_fbx.py](DynamicShadows/Tools/dump_fbx.py)                         | valida un FBX contra lo que exige el importador de Memoria (material obligatorio, UVs, `Lcl Scaling`)                                              |
+| [make_cube_fbx.py](DynamicShadows/Tools/make_cube_fbx.py)               | genera un FBX de prueba con Blender headless                                                                                                       |
 | `CAMERA` en el `.txt`                                          | verificación continua en el juego: `delta` debe ser `0.00`                                                                                         |
 
 **Verificaciones superadas**, por si hay que rehacerlas tras un cambio grande:
@@ -613,7 +658,7 @@ ShadowCaster; `Bumped Diffuse`, `Mobile/Diffuse`, `Transparent/Cutout/Diffuse` y
 
 ## 10. Mapa de archivos
 
-### Código en Memoria (`Memoria/Assembly-CSharp/Memoria/Field/`)
+### Código del motor (`Assembly-CSharp/Memoria/Field/`)
 
 | Archivo                     | Responsabilidad                                                        |
 | --------------------------- | ---------------------------------------------------------------------- |
@@ -629,15 +674,16 @@ y `HonoluluFieldMain.HonoUpdate` (sincronización por frame).
 
 | Archivo                                       | Uso                                              |
 | --------------------------------------------- | ------------------------------------------------ |
-| `tools/build-and-deploy.ps1`                  | compilar y desplegar                             |
-| `tools/blender/build_field_project.py`        | generar el proyecto de Blender de un mapa        |
-| `tools/blender/check_export.py`               | verificar una exportación sin Blender            |
-| `tools/unity/BuildSceneBundle.cs`             | menú `Memoria > Build Scene Bundle` en el editor |
-| `tools/dump_fbx.py`, `tools/make_cube_fbx.py` | utilidades de FBX                                |
+| `DynamicShadows/Tools/build-and-deploy.ps1`           | compilar y desplegar                                  |
+| `DynamicShadows/Tools/blender/build_field_project.py` | generar el proyecto de Blender de un mapa             |
+| `DynamicShadows/Tools/blender/check_export.py`        | verificar una exportación sin Blender                 |
+| `DynamicShadows/Unity/.../Assets/Editor/`             | menús `Dynamic Shadows >` del editor de Unity         |
+| `DynamicShadows/Tools/dump_fbx.py`, `make_cube_fbx.py`| utilidades de FBX                                     |
 
 ### Datos
 
-- `TestScenario/` — carpeta de mod: `DictionaryPatch.txt`, el bundle y los assets
+- `DynamicShadows/Mod/DynamicShadows/` — el mod tal y como se instala: `ModDescription.xml`,
+  `MemoriaFieldObjects.txt`, `DictionaryPatch.txt`, los bundles y los assets
 - `MemoriaFieldObjects.txt` — configuración (la fuente; la copia viva está en la raíz del juego)
 - `<juego>/MemoriaSceneExport/<mapa>/` — exportaciones
 - `<juego>/Memoria.log` — log; se recrea en cada arranque

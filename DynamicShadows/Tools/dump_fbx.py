@@ -1,7 +1,7 @@
 # Lector minimo de FBX binario, para comprobar que un FBX cumple lo que el
 # importador de Memoria necesita antes de meterlo en el juego.
 #
-# Uso:  python tools/dump_fbx.py <archivo.fbx>
+# Uso:  python DynamicShadows/Tools/dump_fbx.py <archivo.fbx>
 
 import struct
 import sys

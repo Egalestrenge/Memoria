@@ -14,7 +14,8 @@ namespace Memoria.Field
     // which cannot be extended without rewriting the ".eb" binary. This reads a plain text file instead,
     // so positions and models can be tweaked without rebuilding the assembly.
     //
-    // File "MemoriaFieldObjects.txt", in the game root folder (next to Memoria.ini):
+    // File "MemoriaFieldObjects.txt", looked up in the game root folder (next to Memoria.ini) first
+    // and then in every active mod folder, so it can ship inside the mod:
     //   <fldMapNo> <modelName> <x> <y> <z> [scale]
     //   1213 GEO_NPC_F0_CUB 0 0 0 1.0
     // Prefix the coordinates with '@' to make them relative to the player's starting position:
@@ -27,6 +28,23 @@ namespace Memoria.Field
     public static class CustomFieldObjects
     {
         public const String ConfigFileName = "MemoriaFieldObjects.txt";
+
+        // La raiz del juego gana sobre las carpetas de mod a proposito. El fichero se relee al
+        // cargar cada mapa, asi que dejar una copia suelta en la raiz es la forma de ajustar
+        // posiciones y luces sin tocar el mod ni reinstalarlo: se edita, se sale del mapa y se
+        // vuelve a entrar. Si no hay ninguna, se usa la que trae el mod.
+        private static String ResolveConfigPath()
+        {
+            if (File.Exists(ConfigFileName))
+                return ConfigFileName;
+            foreach (String modFolder in Configuration.Mod.FolderNames)
+            {
+                String candidate = modFolder + "/" + ConfigFileName;
+                if (File.Exists(candidate))
+                    return candidate;
+            }
+            return null;
+        }
         public const String PrimitiveCubeName = "PRIMITIVE_CUBE";
         public const String TraceKeyword = "TRACE";
         public const String DumpKeyword = "DUMP";
@@ -110,7 +128,8 @@ namespace Memoria.Field
                 _pendingBundleFile = null;
                 _pendingBundleScene = null;
 
-                if (!File.Exists(ConfigFileName))
+                String configPath = ResolveConfigPath();
+                if (configPath == null)
                     return;
 
                 Int32 lineNo = 0;
@@ -122,7 +141,7 @@ namespace Memoria.Field
                 FieldPerspectiveCamera.ShadowBias = -1f;
                 FieldPerspectiveCamera.ShadowNormalBias = -1f;
                 FieldPerspectiveCamera.AutoShadowDistance = true;
-                foreach (String line in File.ReadAllLines(ConfigFileName))
+                foreach (String line in File.ReadAllLines(configPath))
                 {
                     lineNo++;
                     if (IsBlankOrComment(line))

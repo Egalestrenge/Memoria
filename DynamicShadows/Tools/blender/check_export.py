@@ -2,7 +2,7 @@
 # del fondo usando la camara exportada. Sirve para separar "los datos estan mal"
 # de "el montaje en Blender esta mal".
 #
-#   python tools/blender/check_export.py <carpeta_export>
+#   python DynamicShadows/Tools/blender/check_export.py <carpeta_export>
 
 import json
 import math

@@ -1,10 +1,11 @@
-# Compila Assembly-CSharp y despliega la build + el mod de pruebas en el juego.
+# Compila Assembly-CSharp y despliega la DLL + el mod Dynamic Shadows en el juego.
 # Requiere PowerShell COMO ADMINISTRADOR (el juego esta en Program Files).
 #
-#   .\tools\build-and-deploy.ps1              # compila y despliega
-#   .\tools\build-and-deploy.ps1 -SkipBuild   # solo copia el mod y la config
+#   .\DynamicShadows\Tools\build-and-deploy.ps1              # compila y despliega
+#   .\DynamicShadows\Tools\build-and-deploy.ps1 -SkipBuild   # solo despliega el mod
+#   .\DynamicShadows\Tools\build-and-deploy.ps1 -EditConfig  # ademas saca la config a la raiz
 #
-# Notas:
+# Notas del entorno:
 #  - Se usa el MSBuild de VS 2022 Build Tools porque los proyectos C++ piden
 #    el toolset v143, que VS 2026 no incluye (solo trae v145).
 #  - FrameworkPathOverride hace falta porque Memoria.XInputDotNetPure.csproj es
@@ -13,20 +14,25 @@
 param(
     [string] $GamePath = 'C:\Program Files (x86)\Steam\steamapps\common\FINAL FANTASY IX',
     [switch] $SkipBuild,
-    # MemoriaFieldObjects.txt se edita en la carpeta del juego (se relee al cargar cada mapa),
-    # asi que no se sobrescribe salvo que lo pidas explicitamente.
-    [switch] $ResetConfig
+    # El mod ya trae su MemoriaFieldObjects.txt. Con esto se saca ademas una copia a la raiz del
+    # juego, que tiene prioridad sobre la del mod: es la forma de ajustar posiciones, luces y
+    # CHARLIGHT en caliente (se relee al cargar cada mapa) sin tocar el mod ni redesplegar.
+    [switch] $EditConfig
 )
 
 $ErrorActionPreference = 'Stop'
 
-$root     = Split-Path -Parent $PSScriptRoot
-$repo     = Join-Path $root 'Memoria'
+$modName  = 'DynamicShadows'
+$tools    = $PSScriptRoot                              # <repo>\DynamicShadows\Tools
+$project  = Split-Path -Parent $tools                  # <repo>\DynamicShadows
+$repo     = Split-Path -Parent $project                # <repo>  (el fork de Memoria)
 $output   = Join-Path $repo 'Output'
+$modSrc   = Join-Path $project "Mod\$modName"
 $msbuild  = 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe'
 $managed  = Join-Path $GamePath 'x64\FF9_Data\Managed'
 
 if (-not (Test-Path $managed)) { throw "No encuentro la carpeta Managed del juego: $managed" }
+if (-not (Test-Path $modSrc))  { throw "No encuentro la carpeta del mod: $modSrc" }
 
 if (-not $SkipBuild) {
     if (-not (Test-Path $msbuild)) { throw "No encuentro MSBuild de VS 2022 Build Tools: $msbuild" }
@@ -47,25 +53,31 @@ foreach ($dll in @('Assembly-CSharp.dll', 'Memoria.Prime.dll', 'UnityEngine.UI.d
     }
 }
 
-Write-Host '== Desplegando mod y configuracion ==' -ForegroundColor Cyan
-Copy-Item (Join-Path $root 'TestScenario') $GamePath -Recurse -Force
-Write-Host '   TestScenario\'
+Write-Host "== Desplegando el mod $modName ==" -ForegroundColor Cyan
+$modDst = Join-Path $GamePath $modName
+# Copy-Item -Recurse sobre una carpeta que ya existe anida una copia dentro en lugar de
+# fusionarla, asi que se borra el destino primero. Solo se borra la carpeta del mod.
+if (Test-Path $modDst) { Remove-Item $modDst -Recurse -Force }
+Copy-Item $modSrc $modDst -Recurse -Force
+Write-Host "   $modName\ -> $modDst"
 
-$configTarget = Join-Path $GamePath 'MemoriaFieldObjects.txt'
-if ($ResetConfig -or -not (Test-Path $configTarget)) {
-    Copy-Item (Join-Path $root 'MemoriaFieldObjects.txt') $configTarget -Force
-    Write-Host '   MemoriaFieldObjects.txt'
-} else {
-    Write-Host "   MemoriaFieldObjects.txt (conservado; usa -ResetConfig para sobrescribir)"
+$rootConfig = Join-Path $GamePath 'MemoriaFieldObjects.txt'
+if ($EditConfig) {
+    Copy-Item (Join-Path $modSrc 'MemoriaFieldObjects.txt') $rootConfig -Force
+    Write-Host "   MemoriaFieldObjects.txt copiado a la raiz para editar en caliente"
+    Write-Host "   Editalo en: $rootConfig" -ForegroundColor DarkGray
+} elseif (Test-Path $rootConfig) {
+    Write-Warning "Hay un MemoriaFieldObjects.txt en la raiz del juego y tiene PRIORIDAD sobre el"
+    Write-Warning "del mod. Si esperabas ver la config recien desplegada, borra: $rootConfig"
 }
-Write-Host "   Edita las posiciones en: $configTarget" -ForegroundColor DarkGray
 
 $ini = Join-Path $GamePath 'Memoria.ini'
 if (Test-Path $ini) {
     $folderLine = Select-String -Path $ini -Pattern '^\s*FolderNames' -ErrorAction SilentlyContinue
-    if ($folderLine -and $folderLine.Line -notmatch 'TestScenario') {
-        Write-Warning "Memoria.ini: revisa [Mod] FolderNames, ahora vale -> $($folderLine.Line.Trim())"
-        Write-Warning 'Debe incluir "TestScenario" para que el mod se cargue.'
+    if ($folderLine -and $folderLine.Line -notmatch $modName) {
+        Write-Warning "Memoria.ini: [Mod] FolderNames no incluye `"$modName`" y el mod no se cargara."
+        Write-Warning "   Ahora vale -> $($folderLine.Line.Trim())"
+        Write-Warning "   Anadelo ahi, o activa el mod desde el Mod Manager del launcher."
     }
 } else {
     Write-Warning "No existe $ini todavia: lanza el juego una vez despues de parchear."

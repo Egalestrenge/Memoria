@@ -15,7 +15,6 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$root   = Split-Path -Parent $PSScriptRoot
 $script = Join-Path $PSScriptRoot 'blender\build_field_project.py'
 $export = Join-Path $GamePath 'MemoriaSceneExport'
 

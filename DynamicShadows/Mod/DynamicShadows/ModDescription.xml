@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Mod>
+	<Name>Dynamic Shadows</Name>
+	<InstallationPath>DynamicShadows</InstallationPath>
+	<Version>0.1.0</Version>
+	<ReleaseDate>2026-08-31</ReleaseDate>
+	<Author>manuc</Author>
+	<Category>Graphics</Category>
+	<Description>Escenarios 3D con iluminacion y sombras dinamicas reales sobre los mapas de
+	Final Fantasy IX.
+
+	Deriva de BGCAM_DEF una camara en perspectiva de verdad, dibuja un segundo pase 3D sobre el
+	render del juego y mete al personaje en el: recibe la luz de la escena y proyecta sombra sobre
+	la geometria, ocluyendose correctamente con ella. Los fondos prerenderizados se mantienen; lo
+	que se anade es la capa 3D que los acompana.
+
+	Cada mapa trae su escena de Unity horneada en un bundle llamado como su numero de mapa
+	(150.unity3d para Cast. Alex./Guardia). Un mapa sin bundle se juega exactamente igual que
+	sin el mod.
+
+	IMPORTANTE: este mod NO funciona solo con datos. Necesita el Assembly-CSharp.dll de esta
+	version de Memoria, porque el pase 3D es codigo del motor y el sistema de mods de Memoria
+	no carga codigo. Instala el DLL que viene en el release antes de activar el mod.</Description>
+	<PatchNotes>0.1.0 - Primera version publicable.
+	- Camara en perspectiva derivada del field, exacta al pixel
+	- Luz direccional real y sombras proyectadas sobre la geometria
+	- Personaje en el pase 3D, con sombra y profundidad correctas
+	- Carga de escenas de Unity con lightmaps horneados y light probes
+	- Mapas incluidos: 64, 150 (Cast. Alex./Guardia), 151</PatchNotes>
+	<CompatibilityNotes>Sustituye Assembly-CSharp.dll, asi que es incompatible con cualquier
+	otro mod que tambien reemplace ese DLL. Los mods que solo aportan datos (texturas, textos,
+	musica, modelos) conviven sin problema.</CompatibilityNotes>
+	<Website>https://github.com/manuc/Memoria</Website>
+</Mod>

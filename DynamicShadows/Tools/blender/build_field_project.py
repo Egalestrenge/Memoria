@@ -3,10 +3,10 @@
 # walkmesh como malla, y todo a escala metrica.
 #
 # Uso (desde la raiz del proyecto):
-#   blender --background --factory-startup --python tools/blender/build_field_project.py -- <carpeta_export> [salida.blend]
+#   blender --background --factory-startup --python DynamicShadows/Tools/blender/build_field_project.py -- <carpeta_export> [salida.blend]
 #
 # Ejemplo:
-#   blender --background --factory-startup --python tools/blender/build_field_project.py -- ^
+#   blender --background --factory-startup --python DynamicShadows/Tools/blender/build_field_project.py -- ^
 #       "C:/Program Files (x86)/Steam/steamapps/common/FINAL FANTASY IX/MemoriaSceneExport/150"
 
 import json

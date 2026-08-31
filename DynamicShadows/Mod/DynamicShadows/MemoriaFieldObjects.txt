@@ -78,7 +78,7 @@
 #              (field.json), el fondo limpio (background.png) y la malla de
 #              colision (walkmesh.obj). Luego, para montar el proyecto Blender:
 #                blender --background --factory-startup ^
-#                  --python tools/blender/build_field_project.py -- ^
+#                  --python DynamicShadows/Tools/blender/build_field_project.py -- ^
 #                  "<ruta del juego>/MemoriaSceneExport/150"
 #
 # Eje Y: en coordenadas de campo +Y es ARRIBA (lo confirma charAimHeight, que se

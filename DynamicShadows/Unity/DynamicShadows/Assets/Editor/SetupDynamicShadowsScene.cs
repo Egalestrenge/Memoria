@@ -1,4 +1,4 @@
-// Menú "Memoria > Setup Shadow Test Scene".
+// Menú "Dynamic Shadows > Preparar escena".
 //
 // Prepara la escena abierta para la prueba de sombras: crea los materiales si no existen, pone el
 // material de shadow catcher en toda la geometría, añade la direccional y deja el portador del
@@ -10,14 +10,14 @@ using UnityEditor;
 using UnityEngine;
 using System.IO;
 
-public static class SetupShadowTest
+public static class SetupDynamicShadowsScene
 {
     private const string CatcherShader = "Memoria/ShadowCatcher";
     private const string ActorShader = "Memoria/FieldActorLit";
     private const string CarrierName = "MemoriaCharacterMaterial";
     private const string MaterialFolder = "Assets/Materials";
 
-    [MenuItem("Memoria/Setup Shadow Test Scene")]
+    [MenuItem("Dynamic Shadows/Preparar escena")]
     public static void Setup()
     {
         Material catcher = GetOrCreateMaterial(CatcherShader, "ShadowCatcher");
@@ -49,8 +49,9 @@ public static class SetupShadowTest
         SetupLight();
 
         Debug.Log(string.Format(
-            "[SetupShadowTest] Listo: {0} objeto(s) con el shadow catcher. Guarda la escena como " +
-            "ShadowTest y usa Memoria > Build Scene Bundle.", painted));
+            "[DynamicShadows] Listo: {0} objeto(s) con el shadow catcher. Guarda la escena con el " +
+            "numero de mapa por nombre (150.unity para Cast. Alex./Guardia) y usa " +
+            "Dynamic Shadows > Construir bundle.", painted));
     }
 
     private static Material GetOrCreateMaterial(string shaderName, string assetName)
@@ -59,7 +60,7 @@ public static class SetupShadowTest
         if (shader == null)
         {
             Debug.LogError(string.Format(
-                "[SetupShadowTest] No encuentro el shader '{0}'. Comprueba que " +
+                "[DynamicShadows] No encuentro el shader '{0}'. Comprueba que " +
                 "Assets/Shaders/*.shader está en el proyecto y que compila sin errores.", shaderName));
             return null;
         }
@@ -79,7 +80,7 @@ public static class SetupShadowTest
         }
         Material material = new Material(shader);
         AssetDatabase.CreateAsset(material, path);
-        Debug.Log("[SetupShadowTest] Material creado: " + path);
+        Debug.Log("[DynamicShadows] Material creado: " + path);
         return material;
     }
 
@@ -99,7 +100,7 @@ public static class SetupShadowTest
             carrier = GameObject.CreatePrimitive(PrimitiveType.Quad);
             carrier.name = CarrierName;
             Object.DestroyImmediate(carrier.GetComponent<Collider>());
-            Debug.Log("[SetupShadowTest] Portador del material del personaje creado.");
+            Debug.Log("[DynamicShadows] Portador del material del personaje creado.");
         }
 
         carrier.SetActive(true);
@@ -126,7 +127,7 @@ public static class SetupShadowTest
         // vez que se pasa por aquí. Solo se avisa si no hay ninguna luz, que sí es un olvido.
         if (directional == null && Object.FindObjectsOfType<Light>().Length == 0)
         {
-            Debug.LogWarning("[SetupShadowTest] La escena no tiene ninguna luz. Sin al menos una con " +
+            Debug.LogWarning("[DynamicShadows] La escena no tiene ninguna luz. Sin al menos una con " +
                              "sombras activadas, el catcher no tiene nada que recoger y no se verá " +
                              "ninguna sombra.");
         }
@@ -139,7 +140,7 @@ public static class SetupShadowTest
             if (light == null || light.shadows != LightShadows.None)
                 continue;
             light.shadows = LightShadows.Soft;
-            Debug.Log("[SetupShadowTest] '" + light.name + "' no tenía sombras activadas; puesto en Soft.");
+            Debug.Log("[DynamicShadows] '" + light.name + "' no tenía sombras activadas; puesto en Soft.");
         }
     }
 }

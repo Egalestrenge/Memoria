@@ -1,5 +1,5 @@
 # Genera el FBX de prueba para Memoria.
-# Uso:  blender --background --python tools/make_cube_fbx.py -- <ruta_salida.fbx> [semi-tamano]
+# Uso:  blender --background --python DynamicShadows/Tools/make_cube_fbx.py -- <ruta_salida.fbx> [semi-tamano]
 #
 # Requisitos del importador de Memoria (ModelImporter.CreateCustomModelFromFbx):
 #   - El objeto debe tener un material asignado; si no, GetMaterialIndex devuelve -1
@@ -20,7 +20,7 @@ bpy.ops.wm.read_factory_settings(use_empty=True)
 # Blender escribe la conversion metro->centimetro como "Lcl Scaling = 100" en el nodo Model,
 # y FbxBone.GetLocalToWorldMatrix la hornea en los vertices al importar. Es decir, el modelo
 # acaba 100 veces mas grande en el juego que en Blender: compensamos aqui.
-# Verificado con: python tools/dump_fbx.py <archivo.fbx>
+# Verificado con: python DynamicShadows/Tools/dump_fbx.py <archivo.fbx>
 blender_size = (half * 2.0) / 100.0
 
 bpy.ops.mesh.primitive_cube_add(size=blender_size, location=(0.0, 0.0, 0.0))
