@@ -36,7 +36,7 @@ You only need the first two to *play* it. Unity and Blender are for authoring ne
 ## Getting the repo
 
 ```bash
-git clone -b dynamic-shadows https://github.com/<your-user>/Memoria.git Memoria-DynamicShadows
+git clone -b dynamic-shadows https://github.com/Egalestrenge/Memoria.git Memoria-DynamicShadows
 cd Memoria-DynamicShadows
 ```
 
